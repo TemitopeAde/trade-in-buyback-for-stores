@@ -4,8 +4,8 @@
       "command": "npx",
       "args": [
         "-y",
-        "@wix/mcp-remote",
-        "https://mcp.wix.com/sse"
+        "@wix/mcp-remote@latest",
+        "https://mcp.wix.com/mcp"
       ]
     }
   }

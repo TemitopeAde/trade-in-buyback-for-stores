@@ -1,0 +1,22 @@
+import type { Catalog } from '../en';
+import { es } from './es';
+import { fr } from './fr';
+import { de } from './de';
+import { it } from './it';
+import { pt } from './pt';
+import { nl } from './nl';
+import { pl } from './pl';
+import { sv } from './sv';
+import { da } from './da';
+import { no } from './no';
+import { fi } from './fi';
+import { cs } from './cs';
+import { tr } from './tr';
+import { ru } from './ru';
+import { ja } from './ja';
+import { ko } from './ko';
+import { zh } from './zh';
+import { ar } from './ar';
+import { he } from './he';
+
+export const LOCALE_CATALOGS: Record<string, Catalog> = { es, fr, de, it, pt, nl, pl, sv, da, no, fi, cs, tr, ru, ja, ko, zh, ar, he };
