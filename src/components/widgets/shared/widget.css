@@ -192,6 +192,100 @@
 
 /* Product-page CTA */
 .ti-cta { display: flex; flex-direction: column; gap: 6px; align-items: var(--ti-cta-align, flex-start); }
+.ti-cta__preloader { display: inline-flex; align-items: center; min-block-size: 44px; margin: 0; }
+
+/* Right-side popup drawer */
+.ti-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999998;
+  display: flex;
+  justify-content: flex-end;
+  pointer-events: auto;
+}
+
+.ti-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  animation: ti-fade-in 0.2s ease-out;
+  z-index: 999998;
+}
+
+.ti-drawer {
+  position: relative;
+  inline-size: min(100vw, 560px);
+  block-size: 100%;
+  max-block-size: 100vh;
+  background-color: var(--ti-background, #ffffff);
+  color: var(--ti-text, #111827);
+  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 999999;
+  animation: ti-slide-right-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ti-drawer__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-block-end: 1px solid var(--ti-border, #e5e7eb);
+  background: var(--ti-surface, #ffffff);
+  flex-shrink: 0;
+}
+
+.ti-drawer__title {
+  margin: 0;
+  font-family: var(--ti-font-heading, inherit);
+  font-size: calc(var(--ti-size-heading, 20px) * 0.9);
+  font-weight: 700;
+  color: var(--ti-heading, inherit);
+}
+
+.ti-drawer__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 36px;
+  block-size: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--ti-border, #e5e7eb);
+  background: var(--ti-surface, transparent);
+  color: var(--ti-muted, #6b7280);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  padding: 0;
+}
+
+.ti-drawer__close:hover {
+  background: var(--ti-border, #f3f4f6);
+  color: var(--ti-text, #111827);
+  transform: scale(1.05);
+}
+
+.ti-drawer__body {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px;
+}
+
+@keyframes ti-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes ti-slide-right-in {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
 
 @keyframes ti-spin { to { transform: rotate(360deg); } }
 

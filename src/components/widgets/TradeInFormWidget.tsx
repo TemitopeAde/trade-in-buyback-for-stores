@@ -82,7 +82,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // ---- Flow --------------------------------------------------------------------------
 
-function FormFlow() {
+export function FormFlow({ initialProductId, onClose }: { initialProductId?: string; onClose?: () => void } = {}) {
   const { t, style, locale } = useWidget();
   const [state, dispatch] = useReducer(reducer, initial);
   const [issues, setIssues] = useState<Issue[]>([]);
@@ -100,11 +100,11 @@ function FormFlow() {
 
   const steps = [t('form.step.item'), t('form.step.condition'), t('form.step.evidence'), t('form.step.offer')];
 
-  // Prefill from ?product= (e.g. from the product page CTA). Still verified by the server.
+  // Prefill from initialProductId or ?product= (e.g. from the product page CTA). Still verified by the server.
   useEffect(() => {
-    const productId = readQueryParam('product');
-    if (productId && /^[A-Za-z0-9-]{1,64}$/.test(productId)) dispatch({ type: 'select', item: { productId, title: '', source: 'catalog' } });
-  }, []);
+    const pid = initialProductId || readQueryParam('product');
+    if (pid && /^[A-Za-z0-9-]{1,64}$/.test(pid)) dispatch({ type: 'select', item: { productId: pid, title: '', source: 'catalog' } });
+  }, [initialProductId]);
 
   const productId = state.item?.productId;
   const loadConfig = () => {
@@ -382,7 +382,7 @@ function SubmissionSuccess({ result, statusPageUrl, onAnother }: { result: Submi
 }
 
 /** Editor-only preview: shows every styled element with neutral sample content, no data calls. */
-function FormEditorPreview() {
+export function FormEditorPreview() {
   const { t, style, locale } = useWidget();
   const steps = [t('form.step.item'), t('form.step.condition'), t('form.step.evidence'), t('form.step.offer')];
   return (

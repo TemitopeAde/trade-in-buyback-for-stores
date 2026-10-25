@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { formatMoney } from '../../lib/money';
 import type { ProductCtaResponse } from '../../lib/schemas/api';
 import { widgetApi } from './shared/api';
 import { useSiteEnv } from './shared/env';
+import { Loading } from './shared/primitives';
 import { useWidget, WidgetThemeProvider } from './shared/WidgetThemeProvider';
+import { FormEditorPreview, FormFlow } from './TradeInFormWidget';
 
 export type TradeInProductButtonWidgetProps = { styleConfig?: string | null; productId?: string | null };
 
@@ -13,43 +16,193 @@ export function TradeInProductButtonWidget({ styleConfig, productId }: TradeInPr
   const env = useSiteEnv();
   return (
     <WidgetThemeProvider styleConfig={styleConfig} locale={env.locale} isEditor={env.isEditor} as="div" className="ti-root--cta">
-      {env.ready && <Cta productId={productId ?? undefined} isEditor={env.isEditor} />}
+      <Cta productId={productId ?? undefined} styleConfig={styleConfig} isEditor={env.isEditor} envReady={env.ready} />
     </WidgetThemeProvider>
   );
 }
 
-function Cta({ productId, isEditor }: { productId?: string; isEditor: boolean }) {
+function buildCtaHref(formPageUrl: string | undefined, productId: string | undefined): string | undefined {
+  if (!productId) return undefined;
+  const base = formPageUrl?.trim() || '/trade-in';
+  try {
+    const origin = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : 'https://localhost';
+    const url = new URL(base, origin);
+    url.searchParams.set('product', productId);
+    if (formPageUrl && /^https?:\/\//i.test(formPageUrl)) {
+      return url.toString();
+    }
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    const sep = base.includes('?') ? '&' : '?';
+    return `${base}${sep}product=${encodeURIComponent(productId)}`;
+  }
+}
+
+function Cta({
+  productId,
+  styleConfig,
+  isEditor,
+  envReady,
+}: {
+  productId?: string;
+  styleConfig?: string | null;
+  isEditor: boolean;
+  envReady: boolean;
+}) {
   const { t, locale, style } = useWidget();
   const [data, setData] = useState<ProductCtaResponse>();
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    if (isEditor || !productId) return;
-    widgetApi.productCta(productId).then(setData, () => setData({ eligible: false }));
-  }, [productId, isEditor]);
+    if (!envReady) return;
+    if (isEditor || !productId) {
+      setLoading(false);
+      return;
+    }
+    let alive = true;
+    setLoading(true);
+    widgetApi.productCta(productId).then(
+      (res) => {
+        if (alive) {
+          setData(res);
+          setLoading(false);
+        }
+      },
+      () => {
+        if (alive) {
+          setData({ eligible: false });
+          setLoading(false);
+        }
+      }
+    );
+    return () => {
+      alive = false;
+    };
+  }, [productId, isEditor, envReady]);
 
   // In the Editor, show the styled button so merchants can design it; on the site, render
-  // nothing for ineligible products or when no trade-in page is configured.
-  const preview = isEditor;
-  if (!preview && (!data?.eligible || !data.formPageUrl || !productId)) return null;
-
-  const href = (() => {
-    if (preview || !data?.formPageUrl || !productId) return undefined;
-    const url = new URL(data.formPageUrl);
-    url.searchParams.set('product', productId);
-    return url.toString();
-  })();
-  const upTo = preview ? formatMoney(12000, 'USD', locale) : data?.upToMinor !== undefined && data.currency ? formatMoney(data.upToMinor, data.currency, locale) : undefined;
+  // a preloader until data is ready, and then render nothing for ineligible products.
+  const preview = envReady && isEditor;
   const align = style.layout.alignment === 'center' ? 'center' : 'flex-start';
 
+  if (!preview) {
+    if ((!envReady && productId) || (envReady && loading)) {
+      return (
+        <div className="ti-cta" style={{ ['--ti-cta-align' as string]: align }}>
+          <Loading className="ti-cta__preloader" />
+        </div>
+      );
+    }
+    if (!data?.eligible || !productId) return null;
+  }
+
+  const href = preview ? undefined : buildCtaHref(data?.formPageUrl, productId);
+  const upTo = preview
+    ? formatMoney(12000, 'USD', locale)
+    : data?.upToMinor !== undefined && data.currency
+      ? formatMoney(data.upToMinor, data.currency, locale)
+      : undefined;
+
+  const handleClick = (e: React.MouseEvent) => {
+    if (e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+      e.preventDefault();
+      setOpen(true);
+    }
+  };
+
   return (
-    <div className="ti-cta" style={{ ['--ti-cta-align' as string]: align }}>
-      {href ? (
-        <a className="ti-button ti-button--primary" href={href}>{style.content.primaryLabel || t('cta.label')}</a>
-      ) : (
-        <button type="button" className="ti-button ti-button--primary" aria-disabled="true">{style.content.primaryLabel || t('cta.label')}</button>
+    <>
+      <div className="ti-cta" style={{ ['--ti-cta-align' as string]: align }}>
+        {href ? (
+          <a className="ti-button ti-button--primary" href={href} onClick={handleClick}>
+            {style.content.primaryLabel || t('cta.label')}
+          </a>
+        ) : (
+          <button type="button" className="ti-button ti-button--primary" onClick={handleClick}>
+            {style.content.primaryLabel || t('cta.label')}
+          </button>
+        )}
+        {style.content.showProductEstimate && upTo && <span className="ti-helper">{t('form.offer.upTo', { amount: upTo })}</span>}
+        {style.content.showHelperText && <span className="ti-helper">{t('cta.helper')}</span>}
+      </div>
+
+      {open && (
+        <TradeInDrawer
+          productId={productId}
+          styleConfig={styleConfig}
+          locale={locale}
+          isEditor={isEditor}
+          onClose={() => setOpen(false)}
+        />
       )}
-      {style.content.showProductEstimate && upTo && <span className="ti-helper">{t('form.offer.upTo', { amount: upTo })}</span>}
-      {style.content.showHelperText && <span className="ti-helper">{t('cta.helper')}</span>}
-    </div>
+    </>
+  );
+}
+
+function TradeInDrawer({
+  productId,
+  styleConfig,
+  locale,
+  isEditor,
+  onClose,
+}: {
+  productId?: string;
+  styleConfig?: string | null;
+  locale: string;
+  isEditor: boolean;
+  onClose: () => void;
+}) {
+  const { t } = useWidget();
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', handleKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [onClose]);
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <WidgetThemeProvider
+      styleConfig={styleConfig}
+      locale={locale}
+      isEditor={isEditor}
+      as="div"
+      className="ti-drawer-overlay"
+    >
+      <div className="ti-drawer-backdrop" onClick={onClose} aria-hidden="true" />
+      <aside
+        className="ti-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ti-drawer-title"
+      >
+        <header className="ti-drawer__header">
+          <h2 id="ti-drawer-title" className="ti-drawer__title">
+            {t('form.title')}
+          </h2>
+          <button
+            type="button"
+            className="ti-drawer__close"
+            onClick={onClose}
+            aria-label={t('common.close')}
+          >
+            &times;
+          </button>
+        </header>
+        <div className="ti-drawer__body">
+          {isEditor ? <FormEditorPreview /> : <FormFlow initialProductId={productId} onClose={onClose} />}
+        </div>
+      </aside>
+    </WidgetThemeProvider>,
+    document.body
   );
 }

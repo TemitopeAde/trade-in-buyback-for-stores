@@ -133,11 +133,71 @@ describe('TradeInProductButtonWidget', () => {
     expect(container.querySelector('.ti-button')).toBeNull();
   });
 
+  it('shows a preloader until data is ready', async () => {
+    let resolveCta!: (value: Response) => void;
+    fetchWithAuth.mockImplementation(async (url: string) => {
+      const path = new URL(url).pathname;
+      if (path === '/api/catalog/product-cta') {
+        return new Promise<Response>((res) => {
+          resolveCta = res;
+        });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+
+    render(<TradeInProductButtonWidget productId="p1" />);
+    expect(await screen.findByText('Loading…')).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Trade in your old one' })).toBeNull();
+
+    await act(async () => {
+      resolveCta(new Response(JSON.stringify({ eligible: true, upToMinor: 4500, currency: 'USD', formPageUrl: 'https://shop.example.com/trade-in' }), { status: 200 }));
+    });
+
+    expect(await screen.findByRole('link', { name: 'Trade in your old one' })).toBeTruthy();
+    expect(screen.queryByText('Loading…')).toBeNull();
+  });
+
   it('links to the form page with the product and shows "up to"', async () => {
     respond({ '/api/catalog/product-cta': { eligible: true, upToMinor: 4500, currency: 'USD', formPageUrl: 'https://shop.example.com/trade-in' } });
     render(<TradeInProductButtonWidget productId="p1" />);
     const link = await screen.findByRole('link', { name: 'Trade in your old one' });
     expect(link.getAttribute('href')).toBe('https://shop.example.com/trade-in?product=p1');
     expect(screen.getByText('Up to $45.00')).toBeTruthy();
+  });
+
+  it('shows the element and links to /trade-in when formPageUrl is omitted', async () => {
+    respond({ '/api/catalog/product-cta': { eligible: true, upToMinor: 800, currency: 'USD' } });
+    render(<TradeInProductButtonWidget productId="p1" />);
+    const link = await screen.findByRole('link', { name: 'Trade in your old one' });
+    expect(link.getAttribute('href')).toBe('/trade-in?product=p1');
+    expect(screen.getByText('Up to $8.00')).toBeTruthy();
+  });
+
+  it('opens a popup drawer on the right when the button is clicked, and closes on close button click', async () => {
+    respond({
+      '/api/catalog/product-cta': { eligible: true, upToMinor: 800, currency: 'USD' },
+      '/api/catalog/form-config': { eligible: true, questions: [], media: { photoMinimum: 1, videoMode: 'off', videoMaxSeconds: 60 }, handoffMethods: [] },
+    });
+    render(<TradeInProductButtonWidget productId="p1" />);
+    const link = await screen.findByRole('link', { name: 'Trade in your old one' });
+
+    // Dialog is initially closed
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    // Click trade in button
+    fireEvent.click(link);
+
+    // Popup drawer opens
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toBeTruthy();
+    expect(dialog.classList.contains('ti-drawer')).toBe(true);
+    expect(screen.getAllByRole('heading', { name: 'Trade in your item' }).length).toBeGreaterThanOrEqual(1);
+
+    // Click close button
+    const closeBtn = screen.getByRole('button', { name: 'Close' });
+    fireEvent.click(closeBtn);
+
+    // Popup drawer closes
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 });

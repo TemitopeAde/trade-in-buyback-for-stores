@@ -91,10 +91,10 @@ export function TradeInErrorState({ message, onRetry }: { message: string; onRet
   );
 }
 
-export function Loading({ label }: { label?: string }) {
+export function Loading({ label, className }: { label?: string; className?: string }) {
   const { t } = useWidget();
   return (
-    <p className="ti-helper" role="status" aria-live="polite">
+    <p className={['ti-helper', className].filter(Boolean).join(' ')} role="status" aria-live="polite">
       <span className="ti-button__spinner" aria-hidden="true" style={{ display: 'inline-block', marginInlineEnd: 8, verticalAlign: 'middle' }} />
       {label ?? t('common.loading')}
     </p>
