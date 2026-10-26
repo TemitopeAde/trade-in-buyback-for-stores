@@ -1,5 +1,14 @@
 import React, { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { info, inputs } from '@wix/editor';
+import { application, info, inputs } from '@wix/editor';
+import {
+  APP_ID,
+  getPlanEntitlements,
+  getUpgradeUrl,
+  normalizePlanTier,
+  type InstancePlanStatus,
+  type PlanEntitlements,
+  type PlanTier,
+} from '../../lib/plans';
 import {
   Accordion,
   accordionItemBuilder,
@@ -50,29 +59,104 @@ export type TradeInWidgetSettingsPanelProps = {
   kind: WidgetKind;
   /** Localized default texts, shown as placeholders for the overridable labels. */
   defaults: { title?: MessageKey; description?: MessageKey; primaryLabel?: MessageKey; secondaryLabel?: MessageKey };
+  planStatusOverride?: Partial<InstancePlanStatus>;
 };
 
 type ColorKey = keyof TradeInWidgetStyle['colors'];
 const COLOR_KEYS = Object.keys(themeDefaults().colors) as ColorKey[];
 const CTA_COLOR_KEYS: ColorKey[] = ['primary', 'background', 'text', 'mutedText', 'buttonBackground', 'buttonText', 'buttonHoverBackground', 'buttonBorder', 'link'];
 
-export function TradeInWidgetSettingsPanel({ kind, defaults }: TradeInWidgetSettingsPanelProps) {
+export function TradeInWidgetSettingsPanel({ kind, defaults, planStatusOverride }: TradeInWidgetSettingsPanelProps) {
   const [locale, setLocale] = useState('en');
+  const [planStatus, setPlanStatus] = useState<InstancePlanStatus>(() => ({
+    appId: planStatusOverride?.appId || APP_ID,
+    instanceId: planStatusOverride?.instanceId || '',
+    plan: planStatusOverride?.plan || 'basic',
+    isFree: planStatusOverride?.isFree !== false,
+    freeTrialAvailable: planStatusOverride?.freeTrialAvailable ?? true,
+    upgradeUrl: planStatusOverride?.upgradeUrl || getUpgradeUrl(planStatusOverride?.appId || APP_ID, planStatusOverride?.instanceId),
+    entitlements: planStatusOverride?.entitlements || getPlanEntitlements(planStatusOverride?.plan || 'basic'),
+  }));
+
   useEffect(() => {
     info.getLanguageCode().then((l: string) => setLocale(resolveLocale(l)), () => undefined);
   }, []);
+
+  useEffect(() => {
+    if (planStatusOverride) return;
+    let active = true;
+    async function loadPlan() {
+      try {
+        if (typeof application?.getAppInstance === 'function') {
+          const raw = await application.getAppInstance();
+          let parsed: any;
+          if (typeof raw === 'string' && raw.includes('.')) {
+            const payload = raw.split('.')[1];
+            const decoded = typeof atob === 'function' ? atob(payload) : '';
+            if (decoded) parsed = JSON.parse(decoded);
+          } else if (typeof raw === 'object' && raw !== null) {
+            parsed = raw;
+          }
+          const instanceId = parsed?.instanceId || '';
+          const appId = parsed?.appDefId || APP_ID;
+          const isFree = parsed?.isFree !== false;
+          const plan: PlanTier = isFree ? 'basic' : normalizePlanTier(parsed?.billing?.packageName ?? 'pro');
+          if (active) {
+            setPlanStatus({
+              appId,
+              instanceId,
+              plan,
+              isFree,
+              freeTrialAvailable: isFree,
+              upgradeUrl: getUpgradeUrl(appId, instanceId),
+              entitlements: getPlanEntitlements(plan),
+            });
+          }
+        }
+      } catch {
+        // default to basic
+      }
+    }
+    void loadPlan();
+    return () => { active = false; };
+  }, [planStatusOverride]);
+
   const t = useMemo(() => createTranslator(locale), [locale]);
   const { style, saveError, update, replace } = useWidgetStyleProp(kind);
+  const isBasic = planStatus.plan === 'basic';
 
   return (
     <WixDesignSystemProvider>
       <SidePanel width="300" height="100vh">
-        <SidePanel.Header title={t('panel.title')} />
+        <SidePanel.Header
+          title={t('panel.title')}
+          suffix={
+            isBasic ? (
+              <Button
+                size="tiny"
+                skin="premium"
+                priority="primary"
+                onClick={() => window.open(planStatus.upgradeUrl, '_blank', 'noopener,noreferrer')}
+              >
+                {t('panel.startTrial')}
+              </Button>
+            ) : undefined
+          }
+        />
         <SidePanel.Content noPadding stretchVertically>
           {!style ? (
             <Box align="center" padding="SP4"><Loader size="small" /></Box>
           ) : (
-            <PanelBody kind={kind} defaults={defaults} style={style} update={update} replace={replace} t={t} />
+            <PanelBody
+              kind={kind}
+              defaults={defaults}
+              style={style}
+              update={update}
+              replace={replace}
+              t={t}
+              entitlements={planStatus.entitlements}
+              isBasic={isBasic}
+            />
           )}
         </SidePanel.Content>
         <SidePanel.Footer noPadding>
@@ -92,30 +176,66 @@ type BodyProps = TradeInWidgetSettingsPanelProps & {
   update: (fn: (s: TradeInWidgetStyle) => TradeInWidgetStyle) => void;
   replace: (s: TradeInWidgetStyle) => void;
   t: Translate;
+  entitlements: PlanEntitlements;
+  isBasic: boolean;
 };
 
-function PanelBody({ kind, defaults, style, update, replace, t }: BodyProps) {
+function PanelBody({ kind, defaults, style, update, replace, t, entitlements, isBasic }: BodyProps) {
   const set = <S extends StyleSection, K extends keyof TradeInWidgetStyle[S]>(section: S, key: K, value: TradeInWidgetStyle[S][K]) =>
     update((s) => ({ ...s, [section]: { ...s[section], [key]: value } }));
-  const resetSection = (section: StyleSection) => update((s) => ({ ...s, [section]: sectionDefaults(s.theme, section) }));
+  const resetSection = (section: StyleSection) => update((s) => ({ ...s, [section]: sectionDefaults(s.theme, section, kind) }));
   const isCta = kind === 'product-cta';
 
   const items = [
-    accordionItemBuilder({ title: t('panel.section.theme'), initiallyOpen: true, children: <ThemeSection style={style} set={set} update={update} isCta={isCta} t={t} /> }),
-    accordionItemBuilder({ title: t('panel.section.typography'), children: <TypographySection style={style} set={set} reset={() => resetSection('typography')} isCta={isCta} t={t} /> }),
+    accordionItemBuilder({
+      title: t('panel.section.theme'),
+      initiallyOpen: true,
+      children: (
+        <ThemeSection
+          style={style}
+          set={set}
+          update={update}
+          isCta={isCta}
+          t={t}
+          disabledCustom={!entitlements.advancedStyling}
+        />
+      ),
+    }),
+    accordionItemBuilder({
+      title: t('panel.section.typography'),
+      children: (
+        <TypographySection
+          style={style}
+          set={set}
+          reset={() => resetSection('typography')}
+          isCta={isCta}
+          t={t}
+          disabledCustom={!entitlements.advancedStyling}
+        />
+      ),
+    }),
     accordionItemBuilder({ title: t('panel.section.buttons'), children: <ButtonsSection style={style} set={set} reset={() => resetSection('buttons')} t={t} /> }),
     accordionItemBuilder({ title: t('panel.section.layout'), children: <LayoutSection style={style} set={set} reset={() => resetSection('layout')} kind={kind} t={t} /> }),
     ...(isCta ? [] : [accordionItemBuilder({ title: t('panel.section.surfaces'), children: <SurfacesSection style={style} set={set} reset={() => resetSection('surfaces')} t={t} /> })]),
     accordionItemBuilder({ title: t('panel.section.content'), children: <ContentSection style={style} set={set} reset={() => resetSection('content')} kind={kind} defaults={defaults} t={t} /> }),
     ...(kind === 'form' ? [accordionItemBuilder({ title: t('panel.section.form'), children: <FormSection style={style} set={set} t={t} /> })] : []),
-    accordionItemBuilder({ title: t('panel.section.advanced'), children: <AdvancedSection replace={replace} t={t} /> }),
+    accordionItemBuilder({
+      title: t('panel.section.advanced'),
+      children: (
+        <AdvancedSection
+          replace={replace}
+          t={t}
+          disabled={!entitlements.advancedStyling}
+        />
+      ),
+    }),
   ];
 
   return <Accordion skin="light" hideShadow size="small" multiple={false} items={items} />;
 }
 
 type SetFn = <S extends StyleSection, K extends keyof TradeInWidgetStyle[S]>(section: S, key: K, value: TradeInWidgetStyle[S][K]) => void;
-type SectionProps = { style: TradeInWidgetStyle; set: SetFn; t: Translate; reset?: () => void };
+type SectionProps = { style: TradeInWidgetStyle; set: SetFn; t: Translate; reset?: () => void; disabledCustom?: boolean };
 
 // ---- Reusable controls ----------------------------------------------------------
 
@@ -128,14 +248,18 @@ function Group({ children, onReset, t }: { children: ReactNode; onReset?: () => 
   );
 }
 
-function ColorField({ label, value, onChange, t }: { label: string; value: string; onChange: (v: string) => void; t: Translate }) {
+function ColorField({ label, value, onChange, t, disabled, tooltip }: { label: string; value: string; onChange: (v: string) => void; t: Translate; disabled?: boolean; tooltip?: string }) {
   return (
-    <FormField label={label} labelPlacement="left" labelWidth="1fr" inputWidth="30px">
+    <FormField label={label} labelPlacement="left" labelWidth="1fr" inputWidth="30px" statusMessage={tooltip} status={disabled ? 'warning' : undefined}>
       <Box width="30px" height="30px">
         <FillPreview
           fill={value}
           aria-label={t('panel.color.change', { name: label })}
-          onClick={() => inputs.selectColor(value, { onChange: (v) => v && onChange(v) })}
+          disabled={disabled}
+          onClick={() => {
+            if (disabled) return;
+            inputs.selectColor(value, { onChange: (v) => v && onChange(v) });
+          }}
         />
       </Box>
     </FormField>
@@ -193,22 +317,31 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
   );
 }
 
-function FontField({ label, value, onChange, t }: { label: string; value: string; onChange: (v: string) => void; t: Translate }) {
+function FontField({ label, value, onChange, t, disabled, tooltip }: { label: string; value: string; onChange: (v: string) => void; t: Translate; disabled?: boolean; tooltip?: string }) {
   const family = value ? fontFamilyFromShorthand(value) : undefined;
   const unsupported = !!value && !family;
   return (
-    <FormField label={label} statusMessage={unsupported ? t('panel.font.unsupported') : undefined} status={unsupported ? 'warning' : undefined}>
+    <FormField label={label} statusMessage={disabled ? tooltip : unsupported ? t('panel.font.unsupported') : undefined} status={disabled ? 'warning' : unsupported ? 'warning' : undefined}>
       <Box direction="vertical" gap="SP1">
         <Text size="small" secondary ellipsis>{family?.split(',')[0]?.replace(/["']/g, '') || t('panel.font.siteDefault')}</Text>
         <Box gap="SP2">
           <Button
             size="small"
             priority="secondary"
-            onClick={() => inputs.selectFont(value ? { font: value, textDecoration: '' } : undefined, { onChange: (v) => v?.font && onChange(v.font) })}
+            disabled={disabled}
+            title={tooltip}
+            onClick={() => {
+              if (disabled) return;
+              inputs.selectFont(value ? { font: value, textDecoration: '' } : undefined, { onChange: (v) => v?.font && onChange(v.font) });
+            }}
           >
             {t('panel.font.change')}
           </Button>
-          {value && <TextButton size="small" onClick={() => onChange('')}>{t('panel.font.siteDefault')}</TextButton>}
+          {value && (
+            <TextButton size="small" disabled={disabled} onClick={() => { if (!disabled) onChange(''); }}>
+              {t('panel.font.siteDefault')}
+            </TextButton>
+          )}
         </Box>
       </Box>
     </FormField>
@@ -219,7 +352,7 @@ const weightOptions = (t: Translate) => FONT_WEIGHTS.map((w) => ({ value: w, lab
 
 // ---- Sections --------------------------------------------------------------------
 
-function ThemeSection({ style, set, update, isCta, t }: SectionProps & { update: BodyProps['update']; isCta: boolean }) {
+function ThemeSection({ style, set, update, isCta, t, disabledCustom }: SectionProps & { update: BodyProps['update']; isCta: boolean; disabledCustom?: boolean }) {
   const warnings = contrastWarnings(style);
   const keys = isCta ? CTA_COLOR_KEYS : COLOR_KEYS;
   return (
@@ -228,11 +361,19 @@ function ThemeSection({ style, set, update, isCta, t }: SectionProps & { update:
         label={t('panel.theme')}
         value={style.theme}
         options={THEMES.map((th) => ({ value: th, label: t(`panel.theme.${th}`) }))}
-        onChange={(theme) => update((s) => applyTheme(s, theme))}
+        onChange={(theme) => update((s) => applyTheme(s, theme, isCta ? 'product-cta' : undefined))}
       />
       <Text size="tiny" secondary>{t('panel.theme.applyNote')}</Text>
       {keys.map((k) => (
-        <ColorField key={k} label={t(`panel.color.${k}`)} value={style.colors[k]} onChange={(v) => set('colors', k, v)} t={t} />
+        <ColorField
+          key={k}
+          label={t(`panel.color.${k}`)}
+          value={style.colors[k]}
+          onChange={(v) => set('colors', k, v)}
+          t={t}
+          disabled={disabledCustom}
+          tooltip={disabledCustom ? t('panel.plan.requiresPro') : undefined}
+        />
       ))}
       {warnings.length > 0 && (
         <SectionHelper appearance="warning" title={t('panel.contrast.title')}>
@@ -241,26 +382,36 @@ function ThemeSection({ style, set, update, isCta, t }: SectionProps & { update:
           ))}
         </SectionHelper>
       )}
-      <TextButton size="small" onClick={() => update((s) => ({ ...s, colors: sectionDefaults(s.theme, 'colors') }))}>{t('panel.resetToTheme')}</TextButton>
+      <TextButton size="small" onClick={() => update((s) => ({ ...s, colors: sectionDefaults(s.theme, 'colors', isCta ? 'product-cta' : undefined) }))}>{t('panel.resetToTheme')}</TextButton>
     </Group>
   );
 }
 
-function TypographySection({ style, set, reset, isCta, t }: SectionProps & { isCta: boolean }) {
+function TypographySection({ style, set, reset, isCta, t, disabledCustom }: SectionProps & { isCta: boolean; disabledCustom?: boolean }) {
   const ty = style.typography;
   return (
     <Group t={t} onReset={reset}>
-      {!isCta && <FontField label={t('panel.font.heading')} value={ty.headingFont} onChange={(v) => set('typography', 'headingFont', v)} t={t} />}
-      <FontField label={t('panel.font.body')} value={ty.bodyFont} onChange={(v) => set('typography', 'bodyFont', v)} t={t} />
+      {!isCta && (
+        <FontField
+          label={t('panel.font.heading')}
+          value={ty.headingFont}
+          onChange={(v) => set('typography', 'headingFont', v)}
+          t={t}
+          disabled={disabledCustom}
+          tooltip={disabledCustom ? t('panel.plan.requiresPro') : undefined}
+        />
+      )}
+      <FontField
+        label={t('panel.font.body')}
+        value={ty.bodyFont}
+        onChange={(v) => set('typography', 'bodyFont', v)}
+        t={t}
+        disabled={disabledCustom}
+        tooltip={disabledCustom ? t('panel.plan.requiresPro') : undefined}
+      />
       {!isCta && <SliderField label={t('panel.size.heading')} rangeKey="typography.headingSize" value={ty.headingSize} onChange={(v) => set('typography', 'headingSize', v)} />}
-      <SliderField label={t('panel.size.body')} rangeKey="typography.bodySize" value={ty.bodySize} onChange={(v) => set('typography', 'bodySize', v)} />
       {!isCta && <SliderField label={t('panel.size.label')} rangeKey="typography.labelSize" value={ty.labelSize} onChange={(v) => set('typography', 'labelSize', v)} />}
-      <SliderField label={t('panel.size.helper')} rangeKey="typography.helperSize" value={ty.helperSize} onChange={(v) => set('typography', 'helperSize', v)} />
-      <SliderField label={t('panel.size.button')} rangeKey="typography.buttonSize" value={ty.buttonSize} onChange={(v) => set('typography', 'buttonSize', v)} />
       {!isCta && <Select label={t('panel.weight.heading')} value={ty.headingWeight} options={weightOptions(t)} onChange={(v) => set('typography', 'headingWeight', v as FontWeight)} />}
-      <Select label={t('panel.weight.body')} value={ty.bodyWeight} options={weightOptions(t)} onChange={(v) => set('typography', 'bodyWeight', v as FontWeight)} />
-      <SliderField label={t('panel.lineHeight')} rangeKey="typography.lineHeight" value={ty.lineHeight} scale={100} unit="" onChange={(v) => set('typography', 'lineHeight', v)} />
-      <SliderField label={t('panel.letterSpacing')} rangeKey="typography.letterSpacing" value={ty.letterSpacing} scale={100} unit="em" onChange={(v) => set('typography', 'letterSpacing', v)} />
       {!isCta && (
         <Segmented
           label={t('panel.headingAlign')}
@@ -291,7 +442,6 @@ function ButtonsSection({ style, set, reset, t }: SectionProps) {
       />
       <Toggle label={t('panel.button.fullWidth')} checked={b.fullWidth} onChange={(v) => set('buttons', 'fullWidth', v)} />
       <SliderField label={t('panel.button.borderWidth')} rangeKey="buttons.borderWidth" value={b.borderWidth} onChange={(v) => set('buttons', 'borderWidth', v)} />
-      <Select label={t('panel.weight.button')} value={b.textWeight} options={weightOptions(t)} onChange={(v) => set('buttons', 'textWeight', v as FontWeight)} />
       <Select
         label={t('panel.button.hover')}
         value={b.hoverStyle}
@@ -312,7 +462,7 @@ function LayoutSection({ style, set, reset, kind, t }: SectionProps & { kind: Wi
       {!isCta && <SliderField label={t('panel.layout.padding')} rangeKey="layout.padding" value={l.padding} onChange={(v) => set('layout', 'padding', v)} />}
       {!isCta && <SliderField label={t('panel.layout.sectionGap')} rangeKey="layout.sectionGap" value={l.sectionGap} onChange={(v) => set('layout', 'sectionGap', v)} />}
       {kind === 'form' && <SliderField label={t('panel.layout.fieldGap')} rangeKey="layout.fieldGap" value={l.fieldGap} onChange={(v) => set('layout', 'fieldGap', v)} />}
-      <SliderField label={t('panel.layout.buttonGap')} rangeKey="layout.buttonGap" value={l.buttonGap} onChange={(v) => set('layout', 'buttonGap', v)} />
+      <SliderField label={isCta ? t('panel.layout.spacing') : t('panel.layout.buttonGap')} rangeKey="layout.buttonGap" value={l.buttonGap} onChange={(v) => set('layout', 'buttonGap', v)} />
       <Segmented
         label={t('panel.layout.alignment')}
         value={l.alignment}
@@ -401,7 +551,7 @@ function FormSection({ style, set, t }: SectionProps) {
   );
 }
 
-function AdvancedSection({ replace, t }: { replace: (s: TradeInWidgetStyle) => void; t: Translate }) {
+function AdvancedSection({ replace, t, disabled }: { replace: (s: TradeInWidgetStyle) => void; t: Translate; disabled?: boolean }) {
   // Two-step confirmation inside the panel (native dialogs can be blocked in the Editor frame).
   const [confirming, setConfirming] = useState(false);
   return (
@@ -415,9 +565,19 @@ function AdvancedSection({ replace, t }: { replace: (s: TradeInWidgetStyle) => v
           </Box>
         </Box>
       ) : (
-        <Button size="small" priority="secondary" onClick={() => setConfirming(true)}>{t('panel.resetAll')}</Button>
+        <Button
+          size="small"
+          priority="secondary"
+          disabled={disabled}
+          title={disabled ? t('panel.plan.requiresPro') : undefined}
+          onClick={() => {
+            if (!disabled) setConfirming(true);
+          }}
+        >
+          {t('panel.resetAll')}
+        </Button>
       )}
-      <Text size="tiny" secondary>{t('panel.advanced.deferred')}</Text>
+      <Text size="tiny" secondary>{disabled ? t('panel.plan.requiresPro') : t('panel.advanced.deferred')}</Text>
     </Group>
   );
 }

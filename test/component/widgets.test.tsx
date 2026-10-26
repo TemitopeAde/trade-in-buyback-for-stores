@@ -18,11 +18,12 @@ const { TradeInFormWidget } = await import('../../src/components/widgets/TradeIn
 const { TradeInStatusWidget } = await import('../../src/components/widgets/TradeInStatusWidget');
 const { TradeInProductButtonWidget } = await import('../../src/components/widgets/TradeInProductButtonWidget');
 
-function respond(routes: Record<string, unknown>) {
+function respond(routes: Record<string, unknown | ((url: string) => unknown)>) {
   fetchWithAuth.mockImplementation(async (url: string) => {
-    const path = new URL(url).pathname;
-    const body = routes[path];
-    if (body === undefined) return new Response(JSON.stringify({ error: { code: 'not_found' } }), { status: 404 });
+    const parsed = new URL(url);
+    const handler = routes[parsed.pathname];
+    if (handler === undefined) return new Response(JSON.stringify({ error: { code: 'not_found' } }), { status: 404 });
+    const body = typeof handler === 'function' ? handler(url) : handler;
     return new Response(JSON.stringify(body), { status: 200 });
   });
 }
@@ -93,10 +94,50 @@ describe('TradeInFormWidget', () => {
       '/api/trade-ins/estimate': { eligible: true, offerMinor: 5000, currency: 'USD', complete: true },
     });
     render(<TradeInFormWidget styleConfig={serializeStyleConfig(hidden, 'form')} />);
-    await screen.findByText('Phone');
+    await screen.findAllByText('Phone');
     for (let i = 0; i < 3; i++) await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Continue' })));
     expect(await screen.findByRole('checkbox', { name: /I accept the trade-in terms/ })).toBeTruthy();
     expect(screen.queryByLabelText(/Phone/)).toBeNull();
+  });
+
+  it('supports infinite scrolling and pagination in product picker', async () => {
+    respond({
+      '/api/catalog/order-items': [],
+      '/api/catalog/search': (url: string) => {
+        const cursor = new URL(url).searchParams.get('cursor');
+        if (!cursor) {
+          return {
+            items: [{ productId: 'p1', title: 'Product One', imageUrl: 'https://example.com/p1.png', source: 'catalog' }],
+            nextCursor: 'cursor-token-2',
+            hasMore: true,
+          };
+        }
+        return {
+          items: [{ productId: 'p2', title: 'Product Two', imageUrl: 'https://example.com/p2.png', source: 'catalog' }],
+          nextCursor: undefined,
+          hasMore: false,
+        };
+      },
+    });
+
+    render(<TradeInFormWidget />);
+    await screen.findByRole('button', { name: 'Select Product One' });
+
+    // The load more button is rendered when hasMore is true
+    const loadMoreBtn = await screen.findByRole('button', { name: 'Load more products' });
+    expect(loadMoreBtn).toBeTruthy();
+
+    // Verify smaller image element exists within the product button
+    const img = screen.getByRole('button', { name: 'Select Product One' }).querySelector('.ti-product__image');
+    expect(img).toBeTruthy();
+
+    // Clicking load more fetches the next page using cursor
+    fireEvent.click(loadMoreBtn);
+
+    // Both products are now visible
+    await screen.findByRole('button', { name: 'Select Product Two' });
+    expect(screen.getByRole('button', { name: 'Select Product One' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Load more products' })).toBeNull();
   });
 });
 
@@ -145,31 +186,33 @@ describe('TradeInProductButtonWidget', () => {
       return new Response(JSON.stringify({}), { status: 200 });
     });
 
-    render(<TradeInProductButtonWidget productId="p1" />);
-    expect(await screen.findByText('Loading…')).toBeTruthy();
-    expect(screen.queryByRole('link', { name: 'Trade in your old one' })).toBeNull();
+    const { container } = render(<TradeInProductButtonWidget productId="p1" />);
+    await waitFor(() => expect(resolveCta).toBeDefined());
+    expect(container.querySelector('.ti-button__spinner')).toBeTruthy();
+    expect(screen.queryByText('Loading…')).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Trade in' })).toBeNull();
 
     await act(async () => {
       resolveCta(new Response(JSON.stringify({ eligible: true, upToMinor: 4500, currency: 'USD', formPageUrl: 'https://shop.example.com/trade-in' }), { status: 200 }));
     });
 
-    expect(await screen.findByRole('link', { name: 'Trade in your old one' })).toBeTruthy();
-    expect(screen.queryByText('Loading…')).toBeNull();
+    expect(await screen.findByRole('button', { name: 'Trade in' })).toBeTruthy();
+    expect(container.querySelector('.ti-button__spinner')).toBeNull();
   });
 
-  it('links to the form page with the product and shows "up to"', async () => {
+  it('stores the form page URL on data-href with the product and shows "up to"', async () => {
     respond({ '/api/catalog/product-cta': { eligible: true, upToMinor: 4500, currency: 'USD', formPageUrl: 'https://shop.example.com/trade-in' } });
     render(<TradeInProductButtonWidget productId="p1" />);
-    const link = await screen.findByRole('link', { name: 'Trade in your old one' });
-    expect(link.getAttribute('href')).toBe('https://shop.example.com/trade-in?product=p1');
+    const btn = await screen.findByRole('button', { name: 'Trade in' });
+    expect(btn.getAttribute('data-href')).toBe('https://shop.example.com/trade-in?product=p1');
     expect(screen.getByText('Up to $45.00')).toBeTruthy();
   });
 
-  it('shows the element and links to /trade-in when formPageUrl is omitted', async () => {
+  it('shows the element and stores /trade-in on data-href when formPageUrl is omitted', async () => {
     respond({ '/api/catalog/product-cta': { eligible: true, upToMinor: 800, currency: 'USD' } });
     render(<TradeInProductButtonWidget productId="p1" />);
-    const link = await screen.findByRole('link', { name: 'Trade in your old one' });
-    expect(link.getAttribute('href')).toBe('/trade-in?product=p1');
+    const btn = await screen.findByRole('button', { name: 'Trade in' });
+    expect(btn.getAttribute('data-href')).toBe('/trade-in?product=p1');
     expect(screen.getByText('Up to $8.00')).toBeTruthy();
   });
 
@@ -179,13 +222,13 @@ describe('TradeInProductButtonWidget', () => {
       '/api/catalog/form-config': { eligible: true, questions: [], media: { photoMinimum: 1, videoMode: 'off', videoMaxSeconds: 60 }, handoffMethods: [] },
     });
     render(<TradeInProductButtonWidget productId="p1" />);
-    const link = await screen.findByRole('link', { name: 'Trade in your old one' });
+    const btn = await screen.findByRole('button', { name: 'Trade in' });
 
     // Dialog is initially closed
     expect(screen.queryByRole('dialog')).toBeNull();
 
     // Click trade in button
-    fireEvent.click(link);
+    fireEvent.click(btn);
 
     // Popup drawer opens
     const dialog = await screen.findByRole('dialog');
@@ -200,4 +243,55 @@ describe('TradeInProductButtonWidget', () => {
     // Popup drawer closes
     expect(screen.queryByRole('dialog')).toBeNull();
   });
+
+  it('aligns the plugin elements to the left by default', async () => {
+    respond({ '/api/catalog/product-cta': { eligible: true, upToMinor: 800, currency: 'USD' } });
+    const { container } = render(<TradeInProductButtonWidget productId="p1" />);
+    await screen.findByRole('button', { name: 'Trade in' });
+    const cta = container.querySelector('.ti-cta') as HTMLElement;
+    expect(cta).toBeTruthy();
+    expect(cta.style.getPropertyValue('--ti-cta-align')).toBe('flex-start');
+  });
+
+  it('updates alignment and element spacing from styleConfig', async () => {
+    respond({ '/api/catalog/product-cta': { eligible: true, upToMinor: 800, currency: 'USD' } });
+    const config = JSON.stringify({
+      version: 1,
+      layout: { alignment: 'center', buttonGap: 24 },
+    });
+    const { container } = render(<TradeInProductButtonWidget productId="p1" styleConfig={config} />);
+    await screen.findByRole('button', { name: 'Trade in' });
+    const cta = container.querySelector('.ti-cta') as HTMLElement;
+    expect(cta).toBeTruthy();
+    expect(cta.style.getPropertyValue('--ti-cta-align')).toBe('center');
+
+    const root = container.querySelector('.ti-root--cta') as HTMLElement;
+    expect(root).toBeTruthy();
+    expect(root.style.getPropertyValue('--ti-button-gap')).toBe('24px');
+    expect(root.style.getPropertyValue('--ti-align')).toBe('center');
+  });
+
+  it('defaults the main container background to transparent for the plugin', async () => {
+    respond({ '/api/catalog/product-cta': { eligible: true, upToMinor: 800, currency: 'USD' } });
+    const { container } = render(<TradeInProductButtonWidget productId="p1" />);
+    await screen.findByRole('button', { name: 'Trade in' });
+
+    const root = container.querySelector('.ti-root--cta') as HTMLElement;
+    expect(root).toBeTruthy();
+    expect(root.style.getPropertyValue('--ti-background')).toBe('transparent');
+  });
+
+  it('defaults button font weight to 400 and button border to none', async () => {
+    respond({ '/api/catalog/product-cta': { eligible: true, upToMinor: 800, currency: 'USD' } });
+    const { container } = render(<TradeInProductButtonWidget productId="p1" />);
+    const btn = await screen.findByRole('button', { name: 'Trade in' });
+    expect(btn).toBeTruthy();
+
+    const root = container.querySelector('.ti-root--cta') as HTMLElement;
+    expect(root).toBeTruthy();
+    expect(root.style.getPropertyValue('--ti-weight-button')).toBe('400');
+    expect(root.style.getPropertyValue('--ti-btn-border')).toBe('none');
+  });
 });
+
+

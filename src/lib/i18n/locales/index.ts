@@ -18,5 +18,17 @@ import { ko } from './ko';
 import { zh } from './zh';
 import { ar } from './ar';
 import { he } from './he';
+import { id } from './id';
+import { vi } from './vi';
+import { fil } from './fil';
+import { hi } from './hi';
+import { bn } from './bn';
+import { ur } from './ur';
+import { mr } from './mr';
+import { te } from './te';
+import { ta } from './ta';
 
-export const LOCALE_CATALOGS: Record<string, Catalog> = { es, fr, de, it, pt, nl, pl, sv, da, no, fi, cs, tr, ru, ja, ko, zh, ar, he };
+export const LOCALE_CATALOGS: Record<string, Catalog> = {
+  es, fr, de, it, pt, nl, pl, sv, da, no, fi, cs, tr, ru, ja, ko, zh, ar, he,
+  id, vi, fil, hi, bn, ur, mr, te, ta,
+};

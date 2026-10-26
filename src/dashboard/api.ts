@@ -5,6 +5,8 @@ import type {
   AdminListResponse,
   AdminTradeInDetail,
   OverviewResponse,
+  PluginPlacementResponse,
+  PluginPlacementStatus,
 } from '../lib/schemas/admin';
 import type { Rule, Settings } from '../lib/schemas/domain';
 
@@ -12,6 +14,7 @@ export type NotificationLogEntry = { id: string; tradeInId?: string; eventType: 
 export type DeadJob = { id: string; eventType: string; tradeInId?: string; attempts: number; lastError?: string; updatedAt: string };
 import type { OfferResult } from '../lib/offer';
 import type { Report } from '../server/services/ReportingService';
+import type { InstancePlanStatus } from '../lib/plans';
 
 // Dashboard → app backend. fetchWithAuth sends the Wix user's identity; every /api/admin route
 // re-checks that the caller is a dashboard user of this site.
@@ -61,6 +64,8 @@ export const adminApi = {
   createResale: (tradeInId: string) => call<AdminTradeInDetail>('/api/admin/resale', { method: 'POST', body: { tradeInId } }),
   report: (days: number) => call<Report>('/api/admin/report', { query: { days } }),
   reviveJob: (id: string) => call<{ ok: true }>('/api/admin/outbox', { method: 'POST', body: { id } }),
+  plan: () => call<InstancePlanStatus>('/api/admin/plan'),
+  pluginStatus: () => call<PluginPlacementResponse>('/api/admin/plugin-status'),
 };
 
 export function newKey(): string {

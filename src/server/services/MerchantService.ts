@@ -32,6 +32,7 @@ type Deps = {
   settings: SettingsService;
   catalogVersion: (instanceId: string) => Promise<string>;
   giftCardsAvailable?: () => Promise<boolean>;
+  pluginPlaced?: () => Promise<boolean>;
   now?: () => Date;
 };
 
@@ -210,6 +211,7 @@ export class MerchantService {
         settingsSaved: await this.d.settings.exists(instanceId),
         formPageConfigured: !!settings.pages.formPageUrl,
         statusPageConfigured: !!settings.pages.statusPageUrl,
+        pluginPlaced: this.d.pluginPlaced ? await this.d.pluginPlaced().catch(() => false) : undefined,
         giftCardsAvailable: this.d.giftCardsAvailable ? await this.d.giftCardsAvailable().catch(() => false) : undefined,
         emailConfigured: settings.notifications.staffUserIds.length > 0,
       },

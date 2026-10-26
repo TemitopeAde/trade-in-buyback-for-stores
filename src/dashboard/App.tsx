@@ -1,8 +1,8 @@
 import React, { useEffect } from 'react';
-import { Activity, BarChart3, Bell, LayoutDashboard, ListOrdered, Palette, Settings2, SlidersHorizontal } from 'lucide-react';
+import { Activity, BarChart3, Bell, Globe, LayoutDashboard, ListOrdered, Palette, Settings2, SlidersHorizontal, Sparkles } from 'lucide-react';
 import { Toaster } from 'sonner';
 import { STATUS_GROUPS, type AdminListRequest } from '../lib/schemas/admin';
-import { direction } from '../lib/i18n';
+import { direction, TOP_LANGUAGES, type SupportedLocale } from '../lib/i18n';
 import { cn } from './lib/cn';
 import { DashboardProvider, useDashboard } from './context';
 import { AppearancePage } from './pages/Appearance';
@@ -15,6 +15,7 @@ import { RequestDetailPage } from './pages/RequestDetail';
 import { RequestsPage } from './pages/Requests';
 import { RulesPage } from './pages/Rules';
 import { SettingsPage } from './pages/Settings';
+import { NativeSelect } from './ui/input';
 import './styles.css';
 
 const NAV = [
@@ -51,7 +52,7 @@ function Router() {
 }
 
 function Shell() {
-  const { t, path, go, locale } = useDashboard();
+  const { t, path, go, locale, setLocale, isBasic, upgradeUrl } = useDashboard();
   // Retry sweep for background jobs (emails, credit) whenever the dashboard opens. Best effort.
   useEffect(() => {
     adminApi.process().catch(() => undefined);
@@ -62,6 +63,19 @@ function Shell() {
       <div className="mx-auto grid max-w-7xl gap-6 p-4 md:grid-cols-[220px_1fr] md:p-6">
         <nav aria-label={t('dash.nav.label')} className="md:sticky md:top-6 md:self-start">
           <p className="mb-3 px-2 text-sm font-semibold">{t('dash.appName')}</p>
+          {isBasic && (
+            <div className="mb-3 px-2">
+              <a
+                href={upgradeUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex w-full items-center justify-center gap-1.5 rounded-md bg-purple-600 px-2.5 py-1.5 text-xs font-semibold text-white shadow-xs transition hover:bg-purple-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 cursor-pointer text-center"
+              >
+                <Sparkles className="size-3.5 shrink-0" aria-hidden="true" />
+                <span>{t('dash.plan.startTrial')}</span>
+              </a>
+            </div>
+          )}
           <ul className="flex gap-1 overflow-x-auto md:flex-col">
             {NAV.map(({ path: p, key, icon: Icon }) => (
               <li key={p}>
@@ -76,6 +90,25 @@ function Shell() {
               </li>
             ))}
           </ul>
+          <div className="mt-5 border-t border-border pt-4 px-2">
+            <label htmlFor="dashboard-lang-select" className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <Globe className="size-3.5 shrink-0" aria-hidden="true" />
+              <span>{t('dash.sidebar.language')}</span>
+            </label>
+            <NativeSelect
+              id="dashboard-lang-select"
+              aria-label={t('dash.sidebar.selectLanguage')}
+              value={locale}
+              onChange={(e) => setLocale(e.target.value as SupportedLocale)}
+              className="h-8 text-xs cursor-pointer bg-background"
+            >
+              {TOP_LANGUAGES.map((lang) => (
+                <option key={lang.code} value={lang.code}>
+                  {lang.nativeName} ({lang.name})
+                </option>
+              ))}
+            </NativeSelect>
+          </div>
         </nav>
         <main className="min-w-0"><Router /></main>
       </div>

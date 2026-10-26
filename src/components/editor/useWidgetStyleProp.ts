@@ -66,17 +66,17 @@ export function useWidgetStyleProp(kind: WidgetKind): StylePropState {
 
   const load = useCallback(async () => {
     try {
-      const parsed = parseStyleConfig(await widget.getProp(STYLE_PROP));
+      const parsed = parseStyleConfig(await widget.getProp(STYLE_PROP), kind);
       latest.current = parsed;
       lastFonts.current = fontsToPreload(parsed).join('|');
       setStyle(parsed);
     } catch {
       // Unreadable props fall back to defaults; the first edit persists a valid config.
-      const parsed = parseStyleConfig(null);
+      const parsed = parseStyleConfig(null, kind);
       latest.current = parsed;
       setStyle(parsed);
     }
-  }, []);
+  }, [kind]);
 
   useEffect(() => {
     void load();
@@ -98,8 +98,8 @@ export function useWidgetStyleProp(kind: WidgetKind): StylePropState {
   const update = useCallback((updater: (current: TradeInWidgetStyle) => TradeInWidgetStyle) => {
     if (!latest.current) return;
     // Re-validate after every edit so out-of-range or malformed values never persist.
-    replace(parseStyleConfig(JSON.stringify(updater(latest.current))));
-  }, [replace]);
+    replace(parseStyleConfig(JSON.stringify(updater(latest.current)), kind));
+  }, [kind, replace]);
 
   return { style, saveError, update, replace };
 }

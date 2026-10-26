@@ -93,10 +93,15 @@ export function TradeInErrorState({ message, onRetry }: { message: string; onRet
 
 export function Loading({ label, className }: { label?: string; className?: string }) {
   const { t } = useWidget();
+  const text = label === undefined ? t('common.loading') : label;
   return (
     <p className={['ti-helper', className].filter(Boolean).join(' ')} role="status" aria-live="polite">
-      <span className="ti-button__spinner" aria-hidden="true" style={{ display: 'inline-block', marginInlineEnd: 8, verticalAlign: 'middle' }} />
-      {label ?? t('common.loading')}
+      <span
+        className="ti-button__spinner"
+        aria-hidden="true"
+        style={{ display: 'inline-block', marginInlineEnd: text ? 8 : 0, verticalAlign: 'middle' }}
+      />
+      {text}
     </p>
   );
 }

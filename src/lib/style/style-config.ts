@@ -10,7 +10,8 @@ export const STYLE_PROP = 'style-config';
 export const WIDGET_KINDS = ['form', 'status', 'my-trade-ins', 'product-cta'] as const;
 export type WidgetKind = (typeof WIDGET_KINDS)[number];
 
-export const THEMES = ['default', 'light', 'dark', 'minimal', 'brand'] as const;
+export const DEFAULT_THEME = 'minimal' as const;
+export const THEMES = ['minimal', 'default', 'light', 'dark', 'brand'] as const;
 export type ThemeName = (typeof THEMES)[number];
 
 export type TradeInWidgetStyle = {
@@ -157,8 +158,33 @@ export function fontFamilyFromShorthand(shorthand: string): string | undefined {
   return families.join(', ');
 }
 
+/** Returns a safe CSS `font` shorthand value or formats one from safe font families. */
+export function safeFontShorthand(shorthand: string): string | undefined {
+  if (!shorthand || shorthand.length > 300 || /[;{}<>()\\]|url|expression/i.test(shorthand)) return undefined;
+  const trimmed = shorthand.trim();
+  const match = /(?:^|\s)\d+(?:\.\d+)?(?:px|em|rem|pt|%)(?:\/\S+)?\s+(.+)$/.exec(trimmed);
+  if (match) {
+    const families = match[1].split(',').map((f) => f.trim()).filter(Boolean);
+    if (families.length && families.length <= 6 && families.every((f) => FAMILY_TOKEN.test(f))) {
+      return trimmed;
+    }
+  }
+  const families = trimmed.split(',').map((f) => f.trim()).filter(Boolean);
+  if (families.length && families.length <= 6 && families.every((f) => FAMILY_TOKEN.test(f))) {
+    return `normal normal 400 16px/1.5 ${families.join(', ')}`;
+  }
+  return undefined;
+}
+
 export function isSafeFontShorthand(value: unknown): value is string {
   return typeof value === 'string' && (value === '' || fontFamilyFromShorthand(value) !== undefined);
+}
+
+/** Extracts font weight (e.g. "400", "600", "700", "bold") from a CSS font shorthand. */
+export function fontWeightFromShorthand(shorthand: string): string | undefined {
+  if (!shorthand || shorthand.length > 300) return undefined;
+  const match = /(?:^|\s)(100|200|300|400|500|600|700|800|900|bold|normal)\s+\d+(?:\.\d+)?(?:px|em|rem|pt|%)/i.exec(shorthand.trim());
+  return match ? match[1].toLowerCase() : undefined;
 }
 
 export function clampRange(key: RangeKey, value: number): number {
@@ -191,7 +217,7 @@ const BASE: Omit<TradeInWidgetStyle, 'theme' | 'colors'> = {
     letterSpacing: 0,
     headingAlign: 'start',
   },
-  buttons: { shape: 'slightly-rounded', size: 'medium', fullWidth: false, borderWidth: 0, textWeight: 600, hoverStyle: 'darken' },
+  buttons: { shape: 'slightly-rounded', size: 'medium', fullWidth: false, borderWidth: 0, textWeight: 400, hoverStyle: 'darken' },
   layout: { maxWidth: 720, padding: 24, sectionGap: 24, fieldGap: 16, buttonGap: 12, alignment: 'center', cardStyle: 'bordered', stepIndicator: 'numbers' },
   surfaces: { radius: 12, borderWidth: 1, showCardBorder: true, shadow: 'none', inputRadius: 8, inputBorderWidth: 1, showDividers: true },
   content: {
@@ -253,14 +279,19 @@ const THEME_OVERRIDES: Partial<Record<ThemeName, DeepPartial<TradeInWidgetStyle>
   brand: { buttons: { shape: 'pill' }, surfaces: { radius: 16 } },
 };
 
-export function themeDefaults(theme: ThemeName = 'default'): TradeInWidgetStyle {
+export function themeDefaults(theme: ThemeName = DEFAULT_THEME, kind?: WidgetKind): TradeInWidgetStyle {
   const base = structuredClone({ ...BASE, theme, colors: PALETTES[theme] }) as TradeInWidgetStyle;
+  if (kind === 'product-cta') {
+    base.layout.alignment = 'start';
+    base.colors.background = 'transparent';
+    base.buttons.borderWidth = 0;
+  }
   return deepMerge(base, THEME_OVERRIDES[theme] ?? {});
 }
 
 /** Defaults for a section in the given theme (used by per-section reset). */
-export function sectionDefaults<S extends StyleSection>(theme: ThemeName, section: S): TradeInWidgetStyle[S] {
-  return structuredClone(themeDefaults(theme)[section]);
+export function sectionDefaults<S extends StyleSection>(theme: ThemeName, section: S, kind?: WidgetKind): TradeInWidgetStyle[S] {
+  return structuredClone(themeDefaults(theme, kind)[section]);
 }
 
 // ---- Schema (built against a fallback so each invalid leaf falls back individually) ----
@@ -380,22 +411,22 @@ export function migrate(raw: Unknown): Unknown {
 }
 
 /** Validates any stored/unknown value into a complete, safe config. Never throws. */
-export function normalizeStyleConfig(input: unknown): TradeInWidgetStyle {
+export function normalizeStyleConfig(input: unknown, kind?: WidgetKind): TradeInWidgetStyle {
   const raw: Unknown = input && typeof input === 'object' && !Array.isArray(input) ? (input as Unknown) : {};
   const migrated = migrate(raw);
-  const theme = (THEMES as readonly string[]).includes(migrated.theme as string) ? (migrated.theme as ThemeName) : 'default';
-  const fallback = themeDefaults(theme);
+  const theme = (THEMES as readonly string[]).includes(migrated.theme as string) ? (migrated.theme as ThemeName) : DEFAULT_THEME;
+  const fallback = themeDefaults(theme, kind);
   const merged = deepMerge(fallback as unknown as Unknown, migrated);
   return buildSchema(fallback).parse(merged) as TradeInWidgetStyle;
 }
 
 /** Parses the custom element attribute / widget prop string. */
-export function parseStyleConfig(attribute: string | null | undefined): TradeInWidgetStyle {
-  if (!attribute) return themeDefaults();
+export function parseStyleConfig(attribute: string | null | undefined, kind?: WidgetKind): TradeInWidgetStyle {
+  if (!attribute) return themeDefaults(DEFAULT_THEME, kind);
   try {
-    return normalizeStyleConfig(JSON.parse(attribute));
+    return normalizeStyleConfig(JSON.parse(attribute), kind);
   } catch {
-    return themeDefaults();
+    return themeDefaults(DEFAULT_THEME, kind);
   }
 }
 
@@ -407,8 +438,8 @@ export function serializeStyleConfig(style: TradeInWidgetStyle, kind: WidgetKind
 }
 
 /** Switching theme replaces colors and theme-specific shape defaults, but keeps typography and content. */
-export function applyTheme(style: TradeInWidgetStyle, theme: ThemeName): TradeInWidgetStyle {
-  return { ...themeDefaults(theme), typography: style.typography, content: style.content };
+export function applyTheme(style: TradeInWidgetStyle, theme: ThemeName, kind?: WidgetKind): TradeInWidgetStyle {
+  return { ...themeDefaults(theme, kind), typography: style.typography, content: style.content };
 }
 
 /** All font shorthands the widget renders with, for widget.setPreloadFonts (which overwrites each call). */

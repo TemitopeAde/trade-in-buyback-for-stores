@@ -25,14 +25,23 @@ import { Switch } from '../ui/switch';
 
 const shortId = () => Math.random().toString(36).slice(2, 10);
 
-const emptyRule = (): RuleInput => ({
-  name: '', scope: 'all', productIds: [], payoutPercentage: 40, conditionQuestions: [], photoMinimum: 2, videoMode: 'off', videoMaxSeconds: 60, priority: 0, enabled: true,
+const emptyRule = (isBasic?: boolean): RuleInput => ({
+  name: '',
+  scope: isBasic ? 'product' : 'all',
+  productIds: [],
+  payoutPercentage: 40,
+  conditionQuestions: [],
+  photoMinimum: 2,
+  videoMode: 'off',
+  videoMaxSeconds: 60,
+  priority: 0,
+  enabled: true,
 });
 
 type NumericRuleField = 'payoutPercentage' | 'photoMinimum' | 'videoMaxSeconds' | 'priority';
 
 export function RulesPage({ editId }: { editId?: string }) {
-  const { t, go } = useDashboard();
+  const { t, go, entitlements } = useDashboard();
   const { data, error, loading, reload } = useLoad(() => Promise.all([adminApi.rules(), adminApi.settings()]), []);
   if (error) return <LoadError onRetry={reload} />;
   if (loading || !data) return <Skeleton className="h-64" />;
@@ -43,9 +52,23 @@ export function RulesPage({ editId }: { editId?: string }) {
     return <RuleEditor rule={existing} currency={settings.currency} onDone={() => { reload(); go('/rules'); }} />;
   }
 
+  const canAddRule = rules.length < entitlements.maxRules;
+
   return (
     <div className="grid gap-6">
-      <PageHeader title={t('dash.rules.title')} subtitle={t('dash.rules.subtitle')} actions={<Button onClick={() => go('/rules/new')}><Plus aria-hidden="true" />{t('dash.rules.new')}</Button>} />
+      <PageHeader
+        title={t('dash.rules.title')}
+        subtitle={t('dash.rules.subtitle')}
+        actions={
+          <Button
+            disabled={!canAddRule}
+            title={!canAddRule ? t('dash.plan.ruleLimitReached') : undefined}
+            onClick={() => go('/rules/new')}
+          >
+            <Plus aria-hidden="true" />{t('dash.rules.new')}
+          </Button>
+        }
+      />
       <Alert>{t('dash.rules.calcHelp')}</Alert>
       {rules.length === 0 ? (
         <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">{t('dash.rules.empty')}</CardContent></Card>
@@ -73,9 +96,9 @@ export function RulesPage({ editId }: { editId?: string }) {
 }
 
 function RuleEditor({ rule, currency, onDone }: { rule?: Rule; currency: string; onDone: () => void }) {
-  const { t, errorText } = useDashboard();
+  const { t, errorText, entitlements, isBasic } = useDashboard();
   const money = useMoney();
-  const [draft, setDraft] = useState<RuleInput>(() => (rule ? { ...rule } : emptyRule()));
+  const [draft, setDraft] = useState<RuleInput>(() => (rule ? { ...rule } : emptyRule(isBasic)));
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -158,6 +181,8 @@ function RuleEditor({ rule, currency, onDone }: { rule?: Rule; currency: string;
   const err = (k: string) => (errors[k] ? t('dash.field.required') : undefined);
   const numberError = (k: string) => (errors[k] ? t('dash.field.invalidNumber') : undefined);
 
+  const scopeRestricted = isBasic && (draft.scope !== 'product' || draft.productIds.length > 1);
+
   return (
     <div className="rule-editor grid gap-6">
       <PageHeader
@@ -166,7 +191,14 @@ function RuleEditor({ rule, currency, onDone }: { rule?: Rule; currency: string;
           <>
             <Button variant="outline" onClick={onDone} disabled={saving}>{t('dash.cancel')}</Button>
             {rule && <Button variant="outline" onClick={() => setConfirmDelete(true)} disabled={saving}><Trash2 aria-hidden="true" />{t('dash.rules.delete')}</Button>}
-            <Button busy={saving} onClick={save}>{t('dash.save')}</Button>
+            <Button
+              busy={saving}
+              disabled={saving || scopeRestricted}
+              title={scopeRestricted ? t('dash.plan.singleProductOnly') : undefined}
+              onClick={save}
+            >
+              {t('dash.save')}
+            </Button>
           </>
         }
       />
@@ -179,7 +211,16 @@ function RuleEditor({ rule, currency, onDone }: { rule?: Rule; currency: string;
               </Field>
               <Field label={t('dash.rule.scope')} htmlFor="r-scope">
                 <NativeSelect id="r-scope" value={draft.scope} onChange={(e) => set('scope', e.target.value as RuleInput['scope'])}>
-                  {(['all', 'category', 'product'] as const).map((s) => <option key={s} value={s}>{t(`dash.rules.scope.${s}`)}</option>)}
+                  {(['all', 'category', 'product'] as const).map((s) => {
+                    const disabled =
+                      (s === 'all' && !entitlements.allowAllProductsScope) ||
+                      (s === 'category' && !entitlements.allowCategoryScope);
+                    return (
+                      <option key={s} value={s} disabled={disabled}>
+                        {t(`dash.rules.scope.${s}`)} {disabled ? `(${t('dash.plan.scopeAllDisabled')})` : ''}
+                      </option>
+                    );
+                  })}
                 </NativeSelect>
               </Field>
               {draft.scope === 'category' && (
@@ -188,8 +229,22 @@ function RuleEditor({ rule, currency, onDone }: { rule?: Rule; currency: string;
                 </Field>
               )}
               {draft.scope === 'product' && (
-                <Field label={t('dash.rule.productIds')} htmlFor="r-prods" help={t('dash.rule.productIdsHelp')} required error={err('productIds')}>
-                  <Textarea id="r-prods" value={draft.productIds.join('\n')} onChange={(e) => set('productIds', e.target.value.split(/\s+/).filter(Boolean))} />
+                <Field
+                  label={t('dash.rule.productIds')}
+                  htmlFor="r-prods"
+                  help={isBasic ? t('dash.plan.singleProductOnly') : t('dash.rule.productIdsHelp')}
+                  required
+                  error={err('productIds')}
+                >
+                  <Textarea
+                    id="r-prods"
+                    value={draft.productIds.join('\n')}
+                    placeholder={isBasic ? 'Enter 1 product ID' : undefined}
+                    onChange={(e) => {
+                      const ids = e.target.value.split(/\s+/).filter(Boolean);
+                      set('productIds', isBasic ? ids.slice(0, 1) : ids);
+                    }}
+                  />
                 </Field>
               )}
               <Field label={t('dash.rule.payout')} htmlFor="r-payout" required error={numberError('payoutPercentage')}>
@@ -242,7 +297,7 @@ function RuleEditor({ rule, currency, onDone }: { rule?: Rule; currency: string;
               {draft.conditionQuestions.map((q, qi) => (
                 <fieldset key={q.id} className="grid gap-3 rounded-lg border p-4">
                   <div className="flex items-center justify-between gap-2">
-                    <legend className="px-1 text-sm font-medium">{t('dash.rule.question')} {qi + 1}</legend>
+                    <legend className="px-1 text-sm font-medium">{t('dash.rule.questionNumber', { number: qi + 1 })}</legend>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -377,10 +432,11 @@ function RuleEditor({ rule, currency, onDone }: { rule?: Rule; currency: string;
 
 /** Money input that allows a leading minus sign for deductions. */
 function SignedMoney({ id, currency, value, onChange }: { id: string; currency: string; value: number; onChange: (v: number) => void }) {
+  const { t } = useDashboard();
   const negative = value < 0;
   return (
     <div className="flex gap-1">
-      <NativeSelect aria-label="+/−" className="w-14 px-1" value={negative ? '-' : '+'} onChange={(e) => onChange(Math.abs(value) * (e.target.value === '-' ? -1 : 1))}>
+      <NativeSelect aria-label={t('dash.rule.signLabel')} className="w-14 px-1" value={negative ? '-' : '+'} onChange={(e) => onChange(Math.abs(value) * (e.target.value === '-' ? -1 : 1))}>
         <option value="+">+</option>
         <option value="-">−</option>
       </NativeSelect>

@@ -13,7 +13,11 @@ const plain = (max: number) => z.string().trim().max(max).refine((s) => !/[<>]/.
 
 // ---- Customer (site widgets) ----
 
-export const catalogSearchRequest = z.object({ q: z.string().max(80).default('') });
+export const catalogSearchRequest = z.object({
+  q: z.string().max(80).default(''),
+  cursor: z.string().max(512).optional(),
+});
+export type CatalogSearchResponse = { items: CatalogItem[]; nextCursor?: string; hasMore: boolean };
 export const productRequest = z.object({ productId });
 export const estimateRequest = z.object({ productId, answers: conditionAnswersSchema.default({}) });
 

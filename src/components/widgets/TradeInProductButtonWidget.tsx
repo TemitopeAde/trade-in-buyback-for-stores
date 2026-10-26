@@ -15,7 +15,7 @@ export type TradeInProductButtonWidgetProps = { styleConfig?: string | null; pro
 export function TradeInProductButtonWidget({ styleConfig, productId }: TradeInProductButtonWidgetProps) {
   const env = useSiteEnv();
   return (
-    <WidgetThemeProvider styleConfig={styleConfig} locale={env.locale} isEditor={env.isEditor} as="div" className="ti-root--cta">
+    <WidgetThemeProvider styleConfig={styleConfig} kind="product-cta" locale={env.locale} isEditor={env.isEditor} as="div" className="ti-root--cta">
       <Cta productId={productId ?? undefined} styleConfig={styleConfig} isEditor={env.isEditor} envReady={env.ready} />
     </WidgetThemeProvider>
   );
@@ -90,7 +90,7 @@ function Cta({
     if ((!envReady && productId) || (envReady && loading)) {
       return (
         <div className="ti-cta" style={{ ['--ti-cta-align' as string]: align }}>
-          <Loading className="ti-cta__preloader" />
+          <Loading label="" className="ti-cta__preloader" />
         </div>
       );
     }
@@ -104,25 +104,23 @@ function Cta({
       ? formatMoney(data.upToMinor, data.currency, locale)
       : undefined;
 
-  const handleClick = (e: React.MouseEvent) => {
-    if (e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
-      e.preventDefault();
-      setOpen(true);
-    }
+  const handleClick = () => {
+    setOpen(true);
   };
 
   return (
     <>
       <div className="ti-cta" style={{ ['--ti-cta-align' as string]: align }}>
-        {href ? (
-          <a className="ti-button ti-button--primary" href={href} onClick={handleClick}>
-            {style.content.primaryLabel || t('cta.label')}
-          </a>
-        ) : (
-          <button type="button" className="ti-button ti-button--primary" onClick={handleClick}>
-            {style.content.primaryLabel || t('cta.label')}
-          </button>
-        )}
+        {/* Always a <button> — never an <a> — so the Wix custom-element
+            context cannot follow the href before React handles the click. */}
+        <button
+          type="button"
+          className="ti-button ti-button--primary"
+          onClick={handleClick}
+          {...(href ? { 'data-href': href } : {})}
+        >
+          {style.content.primaryLabel || t('cta.label')}
+        </button>
         {style.content.showProductEstimate && upTo && <span className="ti-helper">{t('form.offer.upTo', { amount: upTo })}</span>}
         {style.content.showHelperText && <span className="ti-helper">{t('cta.helper')}</span>}
       </div>

@@ -2,6 +2,7 @@ import { availableActions, type TradeInStatus } from '../../lib/lifecycle';
 import { calculateOffer, maximumPossibleOffer, OFFER_CALCULATION_VERSION, selectRule } from '../../lib/offer';
 import type {
   CatalogItem,
+  CatalogSearchResponse,
   CustomerTradeInView,
   EstimateResponse,
   FormConfig,
@@ -25,14 +26,14 @@ import type { RulesService } from './RulesService';
 import type { SettingsService } from './SettingsService';
 import type { TradeInLifecycleService } from './TradeInLifecycleService';
 import type { TradeInMediaService } from './TradeInMediaService';
-import type { CatalogProduct } from './WixCatalogService';
+import type { CatalogProduct, CatalogSearchResult } from './WixCatalogService';
 
 // Customer-facing orchestration. Every value that affects money (price, category, offer) is
 // read or computed here from trusted sources; the browser only supplies choices.
 
 export type CatalogPort = {
   getProduct(instanceId: string, productId: string): Promise<CatalogProduct | undefined>;
-  search(instanceId: string, term: string, limit?: number): Promise<CatalogProduct[]>;
+  search(instanceId: string, term: string, limit?: number, cursor?: string): Promise<CatalogSearchResult | CatalogProduct[]>;
 };
 export type OrdersPort = {
   eligibleItemsForMember(memberId: string): Promise<{ orderId: string; productId: string; title: string; imageUrl?: string }[]>;
@@ -70,15 +71,18 @@ export class TradeInService {
     return rule ? { product, rule } : undefined;
   }
 
-  async searchCatalog(ctx: RequestContext, q: string): Promise<CatalogItem[]> {
+  async searchCatalog(ctx: RequestContext, q: string, cursor?: string): Promise<CatalogSearchResponse> {
     requireSiteCaller(ctx);
     const rules = await this.d.rules.listEnabled(ctx.instanceId);
-    if (!rules.length) return [];
-    const found = await this.d.catalog.search(ctx.instanceId, q, 24);
-    return found
+    if (!rules.length) return { items: [], hasMore: false };
+    const res = await this.d.catalog.search(ctx.instanceId, q, 24, cursor);
+    const found = Array.isArray(res) ? res : res.products;
+    const nextCursor = Array.isArray(res) ? undefined : res.nextCursor;
+    const hasMore = Array.isArray(res) ? false : res.hasMore;
+    const items = found
       .filter((p) => selectRule(rules, { productId: p.productId, categoryIds: p.categoryIds }))
-      .slice(0, 12)
       .map((p) => ({ productId: p.productId, title: p.title, imageUrl: p.imageUrl, source: 'catalog' as const }));
+    return { items, nextCursor, hasMore };
   }
 
   async memberOrderItems(ctx: RequestContext): Promise<CatalogItem[]> {

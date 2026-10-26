@@ -26,7 +26,9 @@ export function useUploads(maxVideoSeconds: number) {
   const sessionRef = useRef<string>();
   const controllers = useRef(new Map<string, AbortController>());
 
-  const patch = (localId: string, p: Partial<UploadItem>) => setItems((list) => list.map((i) => (i.localId === localId ? { ...i, ...p } : i)));
+    const objectUrls = useRef(new Set<string>());
+
+    const patch = (localId: string, p: Partial<UploadItem>) => setItems((list) => list.map((i) => (i.localId === localId ? { ...i, ...p } : i)));
 
   const start = useCallback(async (item: UploadItem) => {
     const controller = new AbortController();
@@ -65,11 +67,20 @@ export function useUploads(maxVideoSeconds: number) {
         issues.push(issue);
         continue;
       }
+      let previewUrl: string | undefined;
+      if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+        try {
+          previewUrl = URL.createObjectURL(file);
+          objectUrls.current.add(previewUrl);
+        } catch {
+          // Fallback if createObjectURL is unavailable or throws
+        }
+      }
       accepted.push({
         localId: `u${++counter}`,
         kind,
         name: file.name,
-        previewUrl: kind === 'photo' ? URL.createObjectURL(file) : undefined,
+        previewUrl,
         status: 'uploading',
         progress: 0,
         file,
@@ -90,7 +101,12 @@ export function useUploads(maxVideoSeconds: number) {
     controllers.current.get(localId)?.abort();
     setItems((list) => {
       const item = list.find((i) => i.localId === localId);
-      if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      if (item?.previewUrl) {
+        objectUrls.current.delete(item.previewUrl);
+        if (typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+          try { URL.revokeObjectURL(item.previewUrl); } catch {}
+        }
+      }
       return list.filter((i) => i.localId !== localId);
     });
   }, []);
@@ -116,6 +132,11 @@ export function useUploads(maxVideoSeconds: number) {
 
   useEffect(() => () => {
     controllers.current.forEach((c) => c.abort());
+    objectUrls.current.forEach((url) => {
+      if (typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+        try { URL.revokeObjectURL(url); } catch {}
+      }
+    });
   }, []);
 
   return { items, rejections, add, retry, remove, uploadSessionId: () => sessionRef.current };

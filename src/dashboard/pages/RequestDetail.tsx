@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDate, formatDateTime } from '../../lib/i18n';
+import { toPublicMediaUrl } from '../../lib/media';
 import type { AdminTradeInDetail, MerchantAction } from '../../lib/schemas/admin';
 import { AdminApiError, adminApi, newKey } from '../api';
 import { LoadError, MoneyInput, PageHeader, StatusBadge, useMoney } from '../components';
@@ -51,10 +52,10 @@ export function RequestDetailPage({ id }: { id: string }) {
       <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
         <div className="grid content-start gap-6">
           <Card>
-            <CardHeader><CardTitle>{t('dash.detail.product')} & {t('dash.detail.customer')}</CardTitle></CardHeader>
+            <CardHeader><CardTitle>{t('dash.detail.productAndCustomer')}</CardTitle></CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
               <div className="flex gap-3">
-                {d.productImageUrl && <img src={d.productImageUrl} alt="" className="size-16 rounded-md object-cover" />}
+                {toPublicMediaUrl(d.productImageUrl) && <img src={toPublicMediaUrl(d.productImageUrl)} alt="" className="size-16 rounded-md object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
                 <div className="grid text-sm">
                   <span className="font-medium">{d.productTitle}</span>
                   {d.orderId && <span className="text-muted-foreground">{t('dash.detail.order', { order: d.orderId.slice(0, 8) })}</span>}
@@ -190,7 +191,7 @@ function CreditRetry({ detail, onUpdated }: { detail: AdminTradeInDetail; onUpda
 }
 
 function ResaleCard({ detail, onUpdated }: { detail: AdminTradeInDetail; onUpdated: (d: AdminTradeInDetail) => void }) {
-  const { t, errorText } = useDashboard();
+  const { t, errorText, entitlements } = useDashboard();
   const [busy, setBusy] = useState(false);
   const status = detail.resaleDraftStatus as 'not_started' | 'pending' | 'created' | 'failed';
   return (
@@ -202,17 +203,25 @@ function ResaleCard({ detail, onUpdated }: { detail: AdminTradeInDetail; onUpdat
       <CardContent className="flex flex-wrap items-center justify-between gap-3">
         <span className="text-sm">{t(`dash.detail.resale.${status}`)}</span>
         {status !== 'created' && (
-          <Button variant="outline" busy={busy} onClick={async () => {
-            setBusy(true);
-            try {
-              onUpdated(await adminApi.createResale(detail.id));
-              toast.success(t('dash.detail.resaleCreated'));
-            } catch (err) {
-              toast.error(errorText(err));
-            } finally {
-              setBusy(false);
-            }
-          }}>{t('dash.detail.createResale')}</Button>
+          <Button
+            variant="outline"
+            busy={busy}
+            disabled={!entitlements.resaleDrafts || busy}
+            title={!entitlements.resaleDrafts ? t('dash.plan.resaleRequiresPro') : undefined}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                onUpdated(await adminApi.createResale(detail.id));
+                toast.success(t('dash.detail.resaleCreated'));
+              } catch (err) {
+                toast.error(errorText(err));
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            {t('dash.detail.createResale')}
+          </Button>
         )}
       </CardContent>
     </Card>

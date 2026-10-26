@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Skeleton } from '../ui/misc';
 
 export function DiagnosticsPage() {
-  const { t, locale, go, errorText } = useDashboard();
+  const { t, locale, go, errorText, entitlements } = useDashboard();
   const { data, error, loading, reload } = useLoad(() => Promise.all([adminApi.overview(), adminApi.outbox()]), []);
   const [busy, setBusy] = useState<string>();
   if (error) return <LoadError onRetry={reload} />;
@@ -42,6 +42,18 @@ export function DiagnosticsPage() {
               <dt className="text-muted-foreground">{t('dash.diag.giftCards')}</dt>
               <dd>{jobs.giftCardsAvailable ? <Badge variant="success">{t('dash.diag.available')}</Badge> : <span className="text-destructive">{t('dash.diag.unavailable')}</span>}</dd>
             </div>
+            <div className="flex flex-wrap justify-between gap-4">
+              <dt className="text-muted-foreground">{t('dash.diag.pluginStatus')}</dt>
+              <dd>
+                {overview.setup.pluginPlaced === undefined ? (
+                  <span className="text-muted-foreground">—</span>
+                ) : overview.setup.pluginPlaced ? (
+                  <Badge variant="success">{t('dash.diag.placed')}</Badge>
+                ) : (
+                  <Badge variant="outline">{t('dash.diag.notPlaced')}</Badge>
+                )}
+              </dd>
+            </div>
           </dl>
         </CardContent>
       </Card>
@@ -58,7 +70,16 @@ export function DiagnosticsPage() {
                   </div>
                   <div className="flex gap-2">
                     {j.tradeInId && <Button variant="link" size="sm" onClick={() => go(`/requests/${j.tradeInId}`)}>{t('common.viewDetails')}</Button>}
-                    <Button variant="outline" size="sm" busy={busy === j.id} disabled={!!busy} onClick={() => revive(j.id)}>{t('dash.diag.retryJob')}</Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      busy={busy === j.id}
+                      disabled={!!busy || !entitlements.expeditedRetry}
+                      title={!entitlements.expeditedRetry ? t('dash.plan.reviveJobRequiresPro') : undefined}
+                      onClick={() => revive(j.id)}
+                    >
+                      {t('dash.diag.retryJob')}
+                    </Button>
                   </div>
                 </li>
               ))}

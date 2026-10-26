@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { MessageKey } from '../../lib/i18n';
+import { toPublicMediaUrl } from '../../lib/media';
 import { formatMoney } from '../../lib/money';
 import type { CatalogItem, EstimateResponse, FormConfig, SubmitResponse } from '../../lib/schemas/api';
 import type { ConditionAnswers, HandoffMethod } from '../../lib/schemas/domain';
@@ -41,6 +42,7 @@ type State = {
 };
 type Action =
   | { type: 'select'; item: CatalogItem }
+  | { type: 'enrich_item'; item: Partial<CatalogItem> }
   | { type: 'config'; config?: FormConfig; loading: boolean }
   | { type: 'answer'; questionId: string; optionId: string }
   | { type: 'handoff'; value: HandoffMethod }
@@ -56,6 +58,8 @@ function reducer(state: State, action: Action): State {
     case 'select':
       // A different product invalidates answers (questions differ per rule); other input is kept.
       return { ...state, item: action.item, answers: state.item?.productId === action.item.productId ? state.answers : {}, config: undefined };
+    case 'enrich_item':
+      return { ...state, item: state.item ? { ...state.item, ...action.item } : undefined };
     case 'config': {
       const methods = action.config?.handoffMethods ?? [];
       const handoff = state.handoff && methods.some((m) => m.method === state.handoff) ? state.handoff : methods.length === 1 ? methods[0].method : undefined;
@@ -112,7 +116,18 @@ export function FormFlow({ initialProductId, onClose }: { initialProductId?: str
     setConfigError(undefined);
     dispatch({ type: 'config', loading: true });
     widgetApi.formConfig(productId).then(
-      (config) => dispatch({ type: 'config', config, loading: false }),
+      (config) => {
+        dispatch({ type: 'config', config, loading: false });
+        if (config.eligible && config.product) {
+          dispatch({
+            type: 'enrich_item',
+            item: {
+              title: config.product.title,
+              imageUrl: toPublicMediaUrl(config.product.imageUrl),
+            },
+          });
+        }
+      },
       (err) => {
         dispatch({ type: 'config', loading: false });
         setConfigError(t(errorMessageKey(err)));
@@ -247,6 +262,23 @@ export function FormFlow({ initialProductId, onClose }: { initialProductId?: str
                 </p>
               )}
             </>
+          )}
+
+          {state.step > 0 && config?.product && (
+            <div className="ti-selected-item-banner">
+              {toPublicMediaUrl(config.product.imageUrl) ? (
+                <img
+                  className="ti-selected-item-banner__image"
+                  src={toPublicMediaUrl(config.product.imageUrl)}
+                  alt=""
+                  loading="lazy"
+                />
+              ) : null}
+              <div className="ti-selected-item-banner__info">
+                <span className="ti-selected-item-banner__label">{t('form.item.selected')}</span>
+                <strong className="ti-selected-item-banner__title">{config.product.title}</strong>
+              </div>
+            </div>
           )}
 
           {state.step === 1 && config && (

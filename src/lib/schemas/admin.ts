@@ -114,6 +114,17 @@ export type AdminTradeInDetail = AdminTradeInRow & {
   actions: MerchantAction[];
 };
 
+export const CTA_PLUGIN_ID = '878529eb-fc6b-410f-ac98-90672c15aac4';
+
+export type PluginPlacementStatus = {
+  pluginId: string;
+  placedInSlot: boolean;
+};
+
+export type PluginPlacementResponse = {
+  placementStatuses: PluginPlacementStatus[];
+};
+
 export type OverviewResponse = {
   counts: Record<keyof typeof STATUS_GROUPS, number>;
   creditIssuedMinorByCurrency: Record<string, number>;
@@ -128,6 +139,7 @@ export type SetupChecklist = {
   settingsSaved: boolean;
   formPageConfigured: boolean;
   statusPageConfigured: boolean;
+  pluginPlaced?: boolean;
   giftCardsAvailable?: boolean;
   emailConfigured?: boolean;
 };

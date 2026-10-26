@@ -1,16 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyTheme,
+  DEFAULT_THEME,
   fontFamilyFromShorthand,
+  fontWeightFromShorthand,
   isSafeColor,
   normalizeStyleConfig,
   parseStyleConfig,
   serializeStyleConfig,
+  THEMES,
   themeDefaults,
 } from '../../src/lib/style/style-config';
 import { contrastRatio, contrastWarnings, styleToCssVars } from '../../src/lib/style/theme-vars';
 
 describe('style config', () => {
+  it('defaults to the minimal theme', () => {
+    expect(DEFAULT_THEME).toBe('minimal');
+    expect(themeDefaults().theme).toBe('minimal');
+    expect(parseStyleConfig(null).theme).toBe('minimal');
+  });
+
   it('returns complete defaults for missing/invalid input', () => {
     expect(parseStyleConfig(null)).toEqual(themeDefaults());
     expect(parseStyleConfig('not json')).toEqual(themeDefaults());
@@ -65,6 +74,14 @@ describe('style config', () => {
     expect(dark.typography.headingSize).toBe(40);
     expect(dark.content.title).toBe('Hi');
   });
+
+  it('sets transparent default background for product-cta plugin', () => {
+    const ctaDefaults = themeDefaults('default', 'product-cta');
+    expect(ctaDefaults.colors.background).toBe('transparent');
+
+    const darkCta = applyTheme(ctaDefaults, 'dark', 'product-cta');
+    expect(darkCta.colors.background).toBe('transparent');
+  });
 });
 
 describe('validators', () => {
@@ -83,6 +100,14 @@ describe('validators', () => {
     expect(fontFamilyFromShorthand('16px x;}body{display:none')).toBeUndefined();
     expect(fontFamilyFromShorthand('16px url(evil)')).toBeUndefined();
   });
+
+  it('extracts font weight from CSS font shorthand safely', () => {
+    expect(fontWeightFromShorthand('normal normal 700 16px/1.4em avenir-lt-w01_85-heavy1475544,sans-serif')).toBe('700');
+    expect(fontWeightFromShorthand('normal normal 400 16px/1.4em avenir')).toBe('400');
+    expect(fontWeightFromShorthand('italic bold 14px arial')).toBe('bold');
+    expect(fontWeightFromShorthand('arial, sans-serif')).toBeUndefined();
+    expect(fontWeightFromShorthand('')).toBeUndefined();
+  });
 });
 
 describe('theme mapping', () => {
@@ -90,12 +115,24 @@ describe('theme mapping', () => {
     const vars = styleToCssVars(themeDefaults());
     expect(vars['--ti-max-width']).toBe('min(100%, 720px)');
     expect(vars['--ti-font-body']).toBe('inherit');
+    expect(vars['--ti-weight-button']).toBe('400');
+  });
+
+  it('extracts button text weight from bodyFont shorthand when present', () => {
+    const custom = {
+      ...themeDefaults(),
+      typography: {
+        ...themeDefaults().typography,
+        bodyFont: 'normal normal 700 16px/1.4em avenir-lt-w01_85-heavy1475544,sans-serif',
+      },
+    };
+    const vars = styleToCssVars(custom);
+    expect(vars['--ti-weight-button']).toBe('700');
   });
 
   it('computes WCAG contrast and warns on poor pairs', () => {
     expect(contrastRatio('#000000', '#ffffff')).toBeCloseTo(21, 0);
-    expect(contrastWarnings(themeDefaults())).toEqual([]);
-    for (const t of ['light', 'dark', 'minimal', 'brand'] as const) expect(contrastWarnings(themeDefaults(t))).toEqual([]);
+    for (const t of THEMES) expect(contrastWarnings(themeDefaults(t))).toEqual([]);
     const poor = normalizeStyleConfig({ colors: { text: '#cccccc', background: '#ffffff' } });
     expect(contrastWarnings(poor).map((w) => w.pair)).toContain('text_background');
   });

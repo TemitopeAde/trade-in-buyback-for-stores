@@ -50,7 +50,14 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-const renderPanel = () => render(<TradeInWidgetSettingsPanel kind="form" defaults={{ title: 'form.title' }} />);
+const renderPanel = (overrides?: any) =>
+  render(
+    <TradeInWidgetSettingsPanel
+      kind="form"
+      defaults={{ title: 'form.title' }}
+      planStatusOverride={{ plan: 'pro', isFree: false, ...overrides }}
+    />,
+  );
 
 async function openSection(name: string) {
   fireEvent.click(await screen.findByText(name));
@@ -118,5 +125,31 @@ describe('TradeInWidgetSettingsPanel', () => {
     instances.a['style-config'] = serializeStyleConfig({ ...themeDefaults(), colors: { ...themeDefaults().colors, text: '#dddddd' } }, 'form');
     renderPanel();
     expect(await screen.findByText(/Body text on background contrast/)).toBeTruthy();
+  });
+
+  describe('Plan and Trial functionality', () => {
+    it('shows Start trial button when user is on basic plan', async () => {
+      renderPanel({ plan: 'basic', isFree: true });
+      const trialBtn = await screen.findByRole('button', { name: /Start free trial/i });
+      expect(trialBtn).toBeTruthy();
+    });
+
+    it('does NOT show Start trial button when user is on pro or business plan', async () => {
+      renderPanel({ plan: 'pro', isFree: false });
+      expect(screen.queryByRole('button', { name: /Start free trial/i })).toBeNull();
+    });
+
+    it('disables advanced styling actions on basic plan instead of removing them', async () => {
+      renderPanel({ plan: 'basic', isFree: true });
+      await openSection('Advanced');
+      const resetBtn = await screen.findByRole('button', { name: 'Reset widget to defaults' });
+      // WDS buttons may use disabled, aria-disabled, or className
+      const isDisabled =
+        (resetBtn as HTMLButtonElement).disabled ||
+        resetBtn.getAttribute('aria-disabled') === 'true' ||
+        resetBtn.hasAttribute('disabled') ||
+        resetBtn.className.includes('disabled');
+      expect(isDisabled).toBe(true);
+    });
   });
 });

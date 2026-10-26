@@ -6,9 +6,42 @@ export type Vars = Record<string, string | number>;
 export type Translate = (key: MessageKey, vars?: Vars) => string;
 
 export const SUPPORTED_LOCALES = [
-  'en', 'es', 'fr', 'de', 'it', 'pt', 'nl', 'pl', 'sv', 'da', 'no', 'fi', 'cs', 'tr', 'ru', 'ja', 'ko', 'zh', 'ar', 'he',
+  'en', 'zh', 'hi', 'es', 'fr', 'ar', 'bn', 'pt', 'ru', 'ur',
+  'id', 'de', 'ja', 'mr', 'te', 'tr', 'ta', 'vi', 'fil', 'ko',
+  'it', 'nl', 'pl', 'sv', 'da', 'no', 'fi', 'cs', 'he',
 ] as const;
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
+
+export interface LanguageOption {
+  code: SupportedLocale;
+  name: string;
+  nativeName: string;
+  dir: 'ltr' | 'rtl';
+}
+
+/** Top 20 most populous languages in the world */
+export const TOP_LANGUAGES: readonly LanguageOption[] = [
+  { code: 'en', name: 'English', nativeName: 'English', dir: 'ltr' },
+  { code: 'zh', name: 'Chinese (Simplified)', nativeName: '中文 (简体)', dir: 'ltr' },
+  { code: 'hi', name: 'Hindi', nativeName: 'हिन्दी', dir: 'ltr' },
+  { code: 'es', name: 'Spanish', nativeName: 'Español', dir: 'ltr' },
+  { code: 'fr', name: 'French', nativeName: 'Français', dir: 'ltr' },
+  { code: 'ar', name: 'Arabic', nativeName: 'العربية', dir: 'rtl' },
+  { code: 'bn', name: 'Bengali', nativeName: 'বাংলা', dir: 'ltr' },
+  { code: 'pt', name: 'Portuguese', nativeName: 'Português', dir: 'ltr' },
+  { code: 'ru', name: 'Russian', nativeName: 'Русский', dir: 'ltr' },
+  { code: 'ur', name: 'Urdu', nativeName: 'اردو', dir: 'rtl' },
+  { code: 'id', name: 'Indonesian', nativeName: 'Bahasa Indonesia', dir: 'ltr' },
+  { code: 'de', name: 'German', nativeName: 'Deutsch', dir: 'ltr' },
+  { code: 'ja', name: 'Japanese', nativeName: '日本語', dir: 'ltr' },
+  { code: 'mr', name: 'Marathi', nativeName: 'मराठी', dir: 'ltr' },
+  { code: 'te', name: 'Telugu', nativeName: 'తెలుగు', dir: 'ltr' },
+  { code: 'tr', name: 'Turkish', nativeName: 'Türkçe', dir: 'ltr' },
+  { code: 'ta', name: 'Tamil', nativeName: 'தமிழ்', dir: 'ltr' },
+  { code: 'vi', name: 'Vietnamese', nativeName: 'Tiếng Việt', dir: 'ltr' },
+  { code: 'fil', name: 'Filipino', nativeName: 'Filipino', dir: 'ltr' },
+  { code: 'ko', name: 'Korean', nativeName: '한국어', dir: 'ltr' },
+] as const;
 
 const RTL = new Set(['ar', 'he', 'fa', 'ur']);
 

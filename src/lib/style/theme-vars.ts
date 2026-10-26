@@ -1,4 +1,4 @@
-import { fontFamilyFromShorthand, type TradeInWidgetStyle } from './style-config';
+import { fontFamilyFromShorthand, fontWeightFromShorthand, safeFontShorthand, type TradeInWidgetStyle } from './style-config';
 
 // Maps a validated style config to CSS custom properties. The same mapping is used in the
 // Editor preview and on the live site, so both render identically. Values are only ever
@@ -12,8 +12,8 @@ export type ThemeVars = Record<`--ti-${string}`, string>;
 
 export function styleToCssVars(style: TradeInWidgetStyle): ThemeVars {
   const { colors: c, typography: t, buttons: b, layout: l, surfaces: s } = style;
-  const bodyFamily = fontFamilyFromShorthand(t.bodyFont) ?? 'inherit';
-  const headingFamily = fontFamilyFromShorthand(t.headingFont) ?? bodyFamily;
+  const bodyFont = safeFontShorthand(t.bodyFont) ?? 'inherit';
+  const headingFamily = fontFamilyFromShorthand(t.headingFont) ?? (fontFamilyFromShorthand(t.bodyFont) ?? 'inherit');
   const cardBorder =
     l.cardStyle === 'flat' || !s.showCardBorder ? 'none' : `${s.borderWidth}px solid ${c.border}`;
   const cardShadow = l.cardStyle === 'elevated' ? SHADOW[s.shadow === 'none' ? 'subtle' : s.shadow] : SHADOW[s.shadow];
@@ -31,13 +31,13 @@ export function styleToCssVars(style: TradeInWidgetStyle): ThemeVars {
     '--ti-btn-bg': c.buttonBackground,
     '--ti-btn-text': c.buttonText,
     '--ti-btn-hover-bg': b.hoverStyle === 'none' ? c.buttonBackground : c.buttonHoverBackground,
-    '--ti-btn-border': b.borderWidth > 0 ? `${b.borderWidth}px solid ${c.buttonBorder}` : '0',
+    '--ti-btn-border': b.borderWidth > 0 ? `${b.borderWidth}px solid ${c.buttonBorder}` : 'none',
     '--ti-btn2-bg': c.secondaryButtonBackground,
     '--ti-btn2-text': c.secondaryButtonText,
     '--ti-error': c.error,
     '--ti-success': c.success,
     '--ti-link': c.link,
-    '--ti-font-body': bodyFamily,
+    '--ti-font-body': bodyFont,
     '--ti-font-heading': headingFamily,
     '--ti-size-heading': `${t.headingSize}px`,
     '--ti-size-body': `${t.bodySize}px`,
@@ -46,7 +46,7 @@ export function styleToCssVars(style: TradeInWidgetStyle): ThemeVars {
     '--ti-size-button': `${t.buttonSize}px`,
     '--ti-weight-heading': String(t.headingWeight),
     '--ti-weight-body': String(t.bodyWeight),
-    '--ti-weight-button': String(b.textWeight),
+    '--ti-weight-button': fontWeightFromShorthand(t.bodyFont) ?? String(b.textWeight),
     '--ti-line-height': String(t.lineHeight),
     '--ti-letter-spacing': `${t.letterSpacing}em`,
     '--ti-heading-align': t.headingAlign,

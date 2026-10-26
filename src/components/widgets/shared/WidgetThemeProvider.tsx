@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useMemo, type CSSProperties, type ReactNode } from 'react';
 import { createTranslator, direction, type Translate } from '../../../lib/i18n';
-import { parseStyleConfig, type TradeInWidgetStyle } from '../../../lib/style/style-config';
+import { parseStyleConfig, type TradeInWidgetStyle, type WidgetKind } from '../../../lib/style/style-config';
 import { styleToCssVars } from '../../../lib/style/theme-vars';
 import './widget.css';
 
@@ -19,6 +19,7 @@ export function useWidget(): WidgetContextValue {
 
 export function WidgetThemeProvider(props: {
   styleConfig?: string | null;
+  kind?: WidgetKind;
   locale: string;
   isEditor?: boolean;
   className?: string;
@@ -26,7 +27,7 @@ export function WidgetThemeProvider(props: {
   as?: 'section' | 'div';
   children: ReactNode;
 }) {
-  const style = useMemo(() => parseStyleConfig(props.styleConfig), [props.styleConfig]);
+  const style = useMemo(() => parseStyleConfig(props.styleConfig, props.kind), [props.styleConfig, props.kind]);
   const t = useMemo(() => createTranslator(props.locale), [props.locale]);
   const vars = useMemo(() => styleToCssVars(style) as CSSProperties, [style]);
   const value = useMemo(() => ({ style, t, locale: props.locale, isEditor: !!props.isEditor }), [style, t, props.locale, props.isEditor]);

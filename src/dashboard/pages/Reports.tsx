@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
+import { Download } from 'lucide-react';
 import { adminApi } from '../api';
 import { LoadError, PageHeader, StatusBadge, useMoney } from '../components';
 import { useDashboard, useLoad } from '../context';
+import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { NativeSelect } from '../ui/input';
 import { Label } from '../ui/label';
@@ -11,13 +13,33 @@ import type { TradeInStatus } from '../../lib/lifecycle';
 const PERIODS = [7, 30, 90, 365];
 
 export function ReportsPage() {
-  const { t } = useDashboard();
+  const { t, entitlements, isBasic } = useDashboard();
   const money = useMoney();
-  const [days, setDays] = useState(30);
+  const [days, setDays] = useState(isBasic ? 7 : 30);
   const { data, error, loading, reload } = useLoad(() => adminApi.report(days), [days]);
   const list = (m: Record<string, number> | undefined) => {
     const entries = Object.entries(m ?? {});
     return entries.length ? entries.map(([c, v]) => money(v, c)).join(' · ') : t('dash.reports.none');
+  };
+
+  const handleExportCsv = () => {
+    if (!data) return;
+    const rows = [
+      ['Metric', 'Value'],
+      ['Submitted', String(data.submitted)],
+      ['Approved', String(data.approved)],
+      ['Rejected', String(data.rejected)],
+      ['Conversion Rate', `${data.conversionRate}%`],
+      ['Resale Drafts', String(data.resaleDrafts)],
+    ];
+    const csvContent = 'data:text/csv;charset=utf-8,' + rows.map((e) => e.join(',')).join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `trade-in-report-${days}d.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (
@@ -26,11 +48,29 @@ export function ReportsPage() {
         title={t('dash.reports.title')}
         subtitle={t('dash.reports.subtitle')}
         actions={
-          <div className="grid gap-1">
-            <Label htmlFor="rep-period" className="sr-only">{t('dash.reports.period')}</Label>
-            <NativeSelect id="rep-period" value={days} onChange={(e) => setDays(Number(e.target.value))}>
-              {PERIODS.map((d) => <option key={d} value={d}>{t('dash.reports.days', { days: d })}</option>)}
-            </NativeSelect>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              disabled={!entitlements.csvExport || !data}
+              title={!entitlements.csvExport ? t('dash.plan.csvExportRequiresPro') : undefined}
+              onClick={handleExportCsv}
+            >
+              <Download className="size-4" aria-hidden="true" />
+              {t('dash.reports.exportCsv')}
+            </Button>
+            <div className="grid gap-1">
+              <Label htmlFor="rep-period" className="sr-only">{t('dash.reports.period')}</Label>
+              <NativeSelect id="rep-period" value={days} onChange={(e) => setDays(Number(e.target.value))}>
+                {PERIODS.map((d) => {
+                  const disabled = d > entitlements.maxReportDays;
+                  return (
+                    <option key={d} value={d} disabled={disabled}>
+                      {t('dash.reports.days', { days: d })}{disabled ? ` (${t('dash.plan.dateRangeRequiresPro')})` : ''}
+                    </option>
+                  );
+                })}
+              </NativeSelect>
+            </div>
           </div>
         }
       />

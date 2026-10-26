@@ -1,5 +1,6 @@
 import { orders } from '@wix/ecom';
 import { auth } from '@wix/essentials';
+import { toPublicMediaUrl } from '../../lib/media';
 
 // Past-order selection for logged-in members. The member ID always comes from the verified
 // request identity; orders are only ever searched for that member.
@@ -35,7 +36,7 @@ export class WixOrdersService {
           orderNumber: o.number ?? undefined,
           productId: ref.catalogItemId,
           title: li.productName?.original ?? '',
-          imageUrl: li.image ?? undefined,
+          imageUrl: toPublicMediaUrl(li.image),
           purchasedAt: o._createdDate ? new Date(o._createdDate).toISOString() : undefined,
         });
       }

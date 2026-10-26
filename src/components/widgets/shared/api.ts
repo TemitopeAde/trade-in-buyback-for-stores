@@ -1,6 +1,7 @@
 import { httpClient } from '@wix/essentials';
 import type {
   CatalogItem,
+  CatalogSearchResponse,
   CustomerTradeInView,
   EstimateResponse,
   FormConfig,
@@ -46,7 +47,8 @@ async function call<T>(path: string, init?: { method?: 'GET' | 'POST'; query?: R
 }
 
 export const widgetApi = {
-  searchCatalog: (q: string) => call<CatalogItem[]>('/api/catalog/search', { query: { q } }),
+  searchCatalog: (q: string, cursor?: string) =>
+    call<CatalogSearchResponse>('/api/catalog/search', { query: { q, ...(cursor ? { cursor } : {}) } }),
   orderItems: () => call<CatalogItem[]>('/api/catalog/order-items'),
   productCta: (productId: string) => call<ProductCtaResponse>('/api/catalog/product-cta', { query: { productId } }),
   formConfig: (productId: string) => call<FormConfig>('/api/trade-ins/form-config', { query: { productId } }),

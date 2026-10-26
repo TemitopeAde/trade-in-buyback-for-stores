@@ -1,5 +1,6 @@
 import { auth } from '@wix/essentials';
 import { catalogVersioning, products, productsV3 } from '@wix/stores';
+import { toPublicMediaUrl } from '../../lib/media';
 import { toMinor } from '../../lib/money';
 
 // Reads the Wix Stores catalog on the server so prices/categories used for offers are trusted.
@@ -46,10 +47,11 @@ function fromV1(p: V1Product): CatalogProduct | undefined {
   const price = p.priceData?.price;
   const currency = p.priceData?.currency;
   if (!p._id || price == null || !currency) return undefined;
+  const rawImage = p.media?.mainMedia?.image?.url ?? p.media?.items?.[0]?.image?.url;
   return {
     productId: p._id,
     title: p.name ?? '',
-    imageUrl: p.media?.mainMedia?.image?.url ?? undefined,
+    imageUrl: toPublicMediaUrl(rawImage),
     sku: p.sku ?? undefined,
     priceMinor: toMinor(price, currency),
     currency,
@@ -63,10 +65,22 @@ function fromV3(p: V3Product): CatalogProduct | undefined {
   const amount = p.actualPriceRange?.minValue?.amount;
   const currency = p.currency;
   if (!p._id || !amount || !currency) return undefined;
+  const mainMedia = p.media?.main as Record<string, any> | undefined;
+  const firstItem = p.media?.itemsInfo?.items?.[0] as Record<string, any> | undefined;
+  const rawImage =
+    mainMedia?.thumbnail?.url ??
+    mainMedia?.image?.url ??
+    (typeof mainMedia?.image === 'string' ? mainMedia.image : undefined) ??
+    mainMedia?.url ??
+    mainMedia?.id ??
+    firstItem?.image?.url ??
+    (typeof firstItem?.image === 'string' ? firstItem.image : undefined) ??
+    firstItem?.url ??
+    firstItem?.id;
   return {
     productId: p._id,
     title: p.name ?? '',
-    imageUrl: p.media?.main?.url ?? undefined,
+    imageUrl: toPublicMediaUrl(rawImage),
     priceMinor: toMinor(amount, currency),
     currency,
     categoryIds: (p.allCategoriesInfo?.categories ?? []).map((c) => c._id).filter((id): id is string => !!id),
@@ -75,7 +89,13 @@ function fromV3(p: V3Product): CatalogProduct | undefined {
   };
 }
 
-const V3_FIELDS = ['CURRENCY', 'ALL_CATEGORIES_INFO'] as const;
+const V3_FIELDS = ['CURRENCY', 'ALL_CATEGORIES_INFO', 'MEDIA_ITEMS_INFO', 'THUMBNAIL'] as const;
+
+export type CatalogSearchResult = {
+  products: CatalogProduct[];
+  nextCursor?: string;
+  hasMore: boolean;
+};
 
 export class WixCatalogService {
   async getProduct(instanceId: string, productId: string): Promise<CatalogProduct | undefined> {
@@ -95,28 +115,50 @@ export class WixCatalogService {
     return undefined;
   }
 
-  /** Visible products whose name matches the term. */
-  async search(instanceId: string, term: string, limit = 12): Promise<CatalogProduct[]> {
+  /** Visible products whose name matches the term, supporting both V1 and V3 cursor pagination. */
+  async search(instanceId: string, term: string, limit = 12, cursor?: string): Promise<CatalogSearchResult> {
     const version = await getCatalogVersion(instanceId);
     const q = term.trim().slice(0, 80);
+
     if (version === 'V1_CATALOG') {
+      const offset = cursor ? Math.max(0, parseInt(cursor, 10) || 0) : 0;
       let query = elevated.v1Query().limit(limit);
+      if (offset > 0) query = query.skip(offset);
       if (q) query = query.startsWith('name', q);
       const res = await query.find();
-      return res.items.map(fromV1).filter((p): p is CatalogProduct => !!p && p.visible);
+      const products = res.items.map(fromV1).filter((p): p is CatalogProduct => !!p && p.visible);
+      const nextOffset = offset + res.items.length;
+      const hasMore = typeof res.hasNext === 'function' ? res.hasNext() : (res.totalCount != null ? nextOffset < res.totalCount : res.items.length === limit);
+      return {
+        products,
+        nextCursor: hasMore ? String(nextOffset) : undefined,
+        hasMore,
+      };
     }
+
     if (version === 'V3_CATALOG') {
       const res = await elevated.v3Search(
         {
           ...(q ? { search: { expression: q, fields: ['name'] } } : {}),
           filter: { visible: true },
-          cursorPaging: { limit },
+          cursorPaging: {
+            limit,
+            ...(cursor ? { cursor } : {}),
+          },
         },
         { fields: [...V3_FIELDS] },
       );
-      return (res.products ?? []).map(fromV3).filter((p): p is CatalogProduct => !!p);
+      const products = (res.products ?? []).map(fromV3).filter((p): p is CatalogProduct => !!p);
+      const next = res.pagingMetadata?.cursors?.next || undefined;
+      const hasMore = Boolean(res.pagingMetadata?.hasNext && next);
+      return {
+        products,
+        nextCursor: hasMore ? next : undefined,
+        hasMore,
+      };
     }
-    return [];
+
+    return { products: [], hasMore: false };
   }
 }
 

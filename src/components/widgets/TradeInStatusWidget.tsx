@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { formatDate } from '../../lib/i18n';
+import { toPublicMediaUrl } from '../../lib/media';
 import { formatMoney } from '../../lib/money';
 import type { CustomerTradeInView } from '../../lib/schemas/api';
 import { errorMessageKey, widgetApi } from './shared/api';
@@ -89,7 +90,14 @@ export function TradeInStatusView({ accessToken, tradeInId }: { accessToken?: st
             <span className="ti-status-chip">{t(`status.${view.status}`)}</span>
           </div>
           <div className="ti-row" style={{ alignItems: 'flex-start' }}>
-            {view.product.imageUrl && <img src={view.product.imageUrl} alt="" style={{ inlineSize: 72, blockSize: 72, objectFit: 'cover', borderRadius: 8 }} />}
+            {toPublicMediaUrl(view.product.imageUrl) && (
+              <img
+                src={toPublicMediaUrl(view.product.imageUrl)}
+                alt=""
+                style={{ inlineSize: 72, blockSize: 72, objectFit: 'cover', borderRadius: 8 }}
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+              />
+            )}
             <div className="ti-fields" style={{ gap: 4, flex: 1, minInlineSize: 0 }}>
               <strong>{view.product.title}</strong>
               <span className="ti-helper">{formatDate(view.createdAt, locale)}</span>

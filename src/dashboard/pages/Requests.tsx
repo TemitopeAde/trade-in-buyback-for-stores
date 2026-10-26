@@ -54,7 +54,7 @@ export function RequestsPage({ initialGroup }: { initialGroup?: AdminListRequest
                 set({ status: v.startsWith('s:') ? v.slice(2) : undefined, statusGroup: v.startsWith('g:') ? (v.slice(2) as Filters['statusGroup']) : undefined });
               }}>
                 <option value="">{t('dash.requests.allStatuses')}</option>
-                <optgroup label="—">
+                <optgroup label={t('dash.requests.groups')}>
                   {(Object.keys(STATUS_GROUPS) as (keyof typeof STATUS_GROUPS)[]).map((g) => <option key={g} value={`g:${g}`}>{t(`dash.group.${g}`)}</option>)}
                 </optgroup>
                 <optgroup label={t('dash.requests.status')}>
