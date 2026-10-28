@@ -99,6 +99,40 @@ describe('TradeInWidgetSettingsPanel', () => {
     expect(setPreloadFonts).toHaveBeenCalledWith([expect.stringContaining('avenir')]);
   });
 
+  it('sets font and color per text element and resets one element to default', async () => {
+    colorPick = '#ff0066';
+    renderPanel();
+    await openSection('Text');
+    fireEvent.click(await screen.findByLabelText('Change Field labels color'));
+    fireEvent.click(await screen.findByLabelText('Change Main button color'));
+    const fontButtons = await screen.findAllByRole('button', { name: 'Choose font' });
+    fireEvent.click(fontButtons[3]); // Field labels
+    await flushDebounce();
+    expect(saved().colors.label).toBe('#ff0066');
+    expect(saved().colors.buttonText).toBe('#ff0066');
+    expect(saved().typography.labelFont).toContain('avenir');
+    expect(saved().colors.text).toBe(themeDefaults('dark').colors.text);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reset Field labels to default' }));
+    await flushDebounce();
+    expect(saved().colors.label).toBe(themeDefaults('dark').colors.label);
+    expect(saved().typography.labelFont).toBe('');
+    expect(saved().colors.buttonText).toBe('#ff0066');
+  });
+
+  it('resets all text settings at once', async () => {
+    colorPick = '#ff0066';
+    renderPanel();
+    await openSection('Text');
+    fireEvent.click(await screen.findByLabelText('Change Links color'));
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Choose font' }))[8]);
+    await flushDebounce();
+    fireEvent.click(screen.getByRole('button', { name: 'Reset all text to default' }));
+    await flushDebounce();
+    expect(saved().colors.link).toBe(themeDefaults('dark').colors.link);
+    expect(saved().typography).toEqual(themeDefaults('dark').typography);
+  });
+
   it('loads the other instance after a selection change without restyling it', async () => {
     renderPanel();
     await openSection('Content & visibility');
@@ -139,7 +173,7 @@ describe('TradeInWidgetSettingsPanel', () => {
       expect(screen.queryByRole('button', { name: /Start free trial/i })).toBeNull();
     });
 
-    it('disables advanced styling actions on basic plan instead of removing them', async () => {
+    it('enables advanced styling actions on basic plan', async () => {
       renderPanel({ plan: 'basic', isFree: true });
       await openSection('Advanced');
       const resetBtn = await screen.findByRole('button', { name: 'Reset widget to defaults' });
@@ -149,7 +183,22 @@ describe('TradeInWidgetSettingsPanel', () => {
         resetBtn.getAttribute('aria-disabled') === 'true' ||
         resetBtn.hasAttribute('disabled') ||
         resetBtn.className.includes('disabled');
-      expect(isDisabled).toBe(true);
+      expect(isDisabled).toBe(false);
     });
+  });
+
+  it('renders styling sections for product-cta so merchants can style the modal', async () => {
+    instances.a = { 'style-config': serializeStyleConfig(themeDefaults('default', 'product-cta'), 'product-cta') };
+    render(
+      <TradeInWidgetSettingsPanel
+        kind="product-cta"
+        defaults={{ primaryLabel: 'cta.label' }}
+        planStatusOverride={{ plan: 'pro', isFree: false }}
+      />,
+    );
+    expect(await screen.findByText('Theme & colors')).toBeTruthy();
+    expect(await screen.findByText('Borders & surfaces')).toBeTruthy();
+    expect(await screen.findByText('Text')).toBeTruthy();
+    expect(await screen.findByText('Layout & spacing')).toBeTruthy();
   });
 });

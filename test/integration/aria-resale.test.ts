@@ -29,7 +29,7 @@ function setup() {
   const created: string[] = [];
   const port: ResalePort = { create: async ({ slug }) => { created.push(slug); return `prod-${created.length}`; } };
   const resale = new ResaleDraftService(lifecycle, settings, outbox, port);
-  const credit = new CreditService(lifecycle, { issue: async () => ({ giftCardId: 'gc', amount: '1', currency: 'USD' }), exists: async () => true }, settings, outbox);
+  const credit = new CreditService(lifecycle, { issue: async () => ({ giftCardId: 'gc', amount: '1', currency: 'USD' }), exists: async () => true, sendEmail: async () => {} }, settings, outbox);
   const reporting = new ReportingService(repo, async (ids) => ids.map((id) => ({ id, initial: '45.00', balance: '15.00', currency: 'USD' })));
   const aria = new AriaToolsService({ repo, merchant, credit, resale, reporting, rules, settings });
   return { repo, aria, resale, created, rules, reporting };

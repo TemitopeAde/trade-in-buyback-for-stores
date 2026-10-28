@@ -1,4 +1,5 @@
 import { createTranslator, type MessageKey } from '../../lib/i18n';
+import type { ActorType } from '../../lib/lifecycle';
 import { formatMoney } from '../../lib/money';
 import type { CustomerNotificationEvent, MerchantNotificationEvent } from '../../lib/schemas/domain';
 import type { TradeInDoc } from '../types';
@@ -8,6 +9,9 @@ import type { TradeInDoc } from '../types';
 // internal notes.
 
 export type EmailContent = { subject: string; html: string };
+
+/** The gift card code is known not to have reached the customer (failed or switched off). */
+const codeNotSent = (doc: TradeInDoc) => doc.giftCardEmailStatus === 'failed' || doc.giftCardEmailStatus === 'disabled';
 
 export function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -26,7 +30,8 @@ ${button}
 </td></tr></table></body></html>`;
 }
 
-type Ctx = { doc: TradeInDoc; locale: string; storeName: string; statusUrl?: string; extra?: Record<string, string> };
+/** actorType: who made the status change the email is about, when it matters for the wording. */
+type Ctx = { doc: TradeInDoc; locale: string; storeName: string; statusUrl?: string; actorType?: ActorType; extra?: Record<string, string> };
 
 function vars(c: Ctx) {
   const money = (minor?: number) => (minor === undefined ? '' : formatMoney(minor, c.doc.currency, c.locale));
@@ -39,6 +44,7 @@ function vars(c: Ctx) {
     reason: c.doc.status === 'revised_offer_pending' ? (c.doc.revisedOfferReason ?? '') : (c.doc.rejectionReason ?? ''),
     date: c.doc.revisedOfferExpiresAt ? new Intl.DateTimeFormat(c.locale, { dateStyle: 'medium' }).format(new Date(c.doc.revisedOfferExpiresAt)) : '',
     store: c.storeName,
+    tracking: c.doc.trackingNumber ?? '',
     ...c.extra,
   };
 }
@@ -47,10 +53,7 @@ export function customerEmail(event: CustomerNotificationEvent, c: Ctx): EmailCo
   const t = createTranslator(c.locale);
   const v = vars(c);
   const subject = t(`email.customer.${event}.subject`, v);
-  const body: MessageKey =
-    event === 'revised_offer_decision'
-      ? (c.doc.status === 'return_pending' || c.doc.status === 'revised_offer_declined' ? 'email.customer.revised_offer_decision.declined' : 'email.customer.revised_offer_decision.accepted')
-      : (`email.customer.${event}.body` as MessageKey);
+  const body = customerBody(event, c);
   const dir = /^(ar|he)/.test(c.locale) ? 'rtl' : 'ltr';
   return {
     subject,
@@ -64,12 +67,34 @@ export function customerEmail(event: CustomerNotificationEvent, c: Ctx): EmailCo
   };
 }
 
+function customerBody(event: CustomerNotificationEvent, c: Ctx): MessageKey {
+  switch (event) {
+    case 'revised_offer_decision':
+      if (c.doc.status !== 'return_pending' && c.doc.status !== 'revised_offer_declined') return 'email.customer.revised_offer_decision.accepted';
+      // The system declines on the customer's behalf only when the offer expired.
+      return c.actorType === 'system' ? 'email.customer.revised_offer_decision.expired' : 'email.customer.revised_offer_decision.declined';
+    case 'cancellation':
+      return c.actorType === 'customer' ? 'email.customer.cancellation.byCustomer' : 'email.customer.cancellation.body';
+    case 'credit_issued':
+      // Don't promise a Wix email that didn't go out.
+      return codeNotSent(c.doc) ? 'email.customer.credit_issued.codePending' : 'email.customer.credit_issued.body';
+    default:
+      return `email.customer.${event}.body`;
+  }
+}
+
 export function merchantEmail(event: MerchantNotificationEvent, c: Ctx): EmailContent {
   const t = createTranslator(c.locale);
   const v = vars(c);
   const subject = t(`email.merchant.${event}.subject`, v);
+  const body: MessageKey =
+    event === 'credit_issued' && codeNotSent(c.doc)
+      ? 'email.merchant.credit_issued.codeNotSent'
+      : event === 'shipped' && c.doc.trackingNumber
+        ? 'email.merchant.shipped.withTracking'
+        : `email.merchant.${event}.body`;
   return {
     subject,
-    html: layout({ title: subject, paragraphs: [t(`email.merchant.${event}.body`, v), t('email.openDashboard')], footer: t('email.footer', v), dir: 'ltr' }),
+    html: layout({ title: subject, paragraphs: [t(body, v), t('email.openDashboard')], footer: t('email.footer', v), dir: 'ltr' }),
   };
 }

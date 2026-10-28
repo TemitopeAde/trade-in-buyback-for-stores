@@ -26,6 +26,7 @@ export function OverviewPage() {
         ['dash.setup.statusPage', data.setup.statusPageConfigured, '/settings'],
         ...(data.setup.pluginPlaced !== undefined ? [['dash.setup.pluginPlaced', data.setup.pluginPlaced, '/appearance'] as const] : []),
         ...(data.setup.giftCardsAvailable !== undefined ? [['dash.setup.giftCards', data.setup.giftCardsAvailable, '/diagnostics'] as const] : []),
+        ...(data.setup.giftCardEmailWorking !== undefined ? [['dash.setup.giftCardEmail', data.setup.giftCardEmailWorking, '/settings'] as const] : []),
         ...(data.setup.emailConfigured !== undefined ? [['dash.setup.email', data.setup.emailConfigured, '/notifications'] as const] : []),
       ] as const)
     : [];
@@ -35,19 +36,19 @@ export function OverviewPage() {
     <div className="grid gap-6">
       <PageHeader title={t('dash.overview.title')} subtitle={t('dash.overview.subtitle')} actions={<Button variant="outline" onClick={() => go('/requests')}>{t('dash.overview.viewAll')}<ArrowRight aria-hidden="true" /></Button>} />
       {isBasic && (
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-xl border border-purple-200 bg-purple-50 p-4 dark:border-purple-900 dark:bg-purple-950/40">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-xl border border-transparent bg-gradient-to-r from-purple-700 via-violet-700 to-indigo-800 p-4 text-white">
           <div className="flex items-start gap-3">
-            <Sparkles className="size-5 text-purple-600 dark:text-purple-400 mt-0.5 shrink-0" aria-hidden="true" />
+            <Sparkles className="size-5 text-purple-100 mt-0.5 shrink-0" aria-hidden="true" />
             <div>
-              <p className="text-sm font-semibold text-purple-900 dark:text-purple-200">{t('dash.plan.basicBadge')}</p>
-              <p className="text-xs text-purple-700 dark:text-purple-300 mt-0.5">{t('dash.plan.upgradePrompt')}</p>
+              <p className="text-sm font-semibold text-white">{t('dash.plan.basicBadge')}</p>
+              <p className="text-xs text-purple-100 mt-0.5">{t('dash.plan.upgradePrompt')}</p>
             </div>
           </div>
           <a
             href={upgradeUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-3.5 py-2 text-xs font-semibold text-white shadow-xs transition hover:bg-purple-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 whitespace-nowrap cursor-pointer"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3.5 py-2 text-xs font-semibold text-purple-800 shadow-xs transition hover:bg-purple-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white whitespace-nowrap cursor-pointer"
           >
             <Sparkles className="size-3.5" aria-hidden="true" />
             {t('dash.plan.startTrial')}

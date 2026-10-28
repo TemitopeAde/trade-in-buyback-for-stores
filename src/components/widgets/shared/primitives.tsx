@@ -108,8 +108,9 @@ export function Loading({ label, className }: { label?: string; className?: stri
 
 /** Title + description block honoring the per-widget content visibility settings. */
 export function WidgetHeader({ id, defaultTitle, defaultDescription }: { id: string; defaultTitle: string; defaultDescription: string }) {
-  const { style } = useWidget();
+  const { style, hostHeader } = useWidget();
   const c = style.content;
+  if (hostHeader) return null;
   if (!c.showTitle && !c.showDescription) {
     // Keep an accessible name for the region even when the visible title is hidden.
     return <h2 id={id} className="ti-visually-hidden">{c.title || defaultTitle}</h2>;

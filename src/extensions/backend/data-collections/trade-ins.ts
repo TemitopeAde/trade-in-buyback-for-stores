@@ -40,6 +40,8 @@ export default {
     { key: 'giftCardStatus', type: 'TEXT', displayName: 'Gift card status' },
     { key: 'giftCardIssuedAt', type: 'DATETIME', displayName: 'Gift card issued at' },
     { key: 'giftCardIdempotencyKey', type: 'TEXT', displayName: 'Gift card idempotency key' },
+    { key: 'giftCardEmailStatus', type: 'TEXT', displayName: 'Gift card email status' },
+    { key: 'giftCardEmailAt', type: 'DATETIME', displayName: 'Gift card email attempted at' },
     { key: 'resaleProductId', type: 'TEXT', displayName: 'Resale product ID' },
     { key: 'resaleDraftStatus', type: 'TEXT', displayName: 'Resale draft status' },
     { key: 'submissionKey', type: 'TEXT', displayName: 'Submission idempotency key' },

@@ -197,7 +197,7 @@ function TradeInDrawer({
           </button>
         </header>
         <div className="ti-drawer__body">
-          {isEditor ? <FormEditorPreview /> : <FormFlow initialProductId={productId} onClose={onClose} />}
+          {isEditor ? <FormEditorPreview /> : <FormFlow initialProductId={productId} onClose={onClose} isModal={true} />}
         </div>
       </aside>
     </WidgetThemeProvider>,

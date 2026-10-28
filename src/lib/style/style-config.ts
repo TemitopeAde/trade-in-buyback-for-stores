@@ -24,6 +24,8 @@ export type TradeInWidgetStyle = {
     heading: string;
     text: string;
     mutedText: string;
+    description: string;
+    label: string;
     border: string;
     inputBackground: string;
     inputText: string;
@@ -41,6 +43,13 @@ export type TradeInWidgetStyle = {
     /** CSS `font` shorthand from inputs.selectFont(); only its family list is applied. Empty = inherit site font. */
     headingFont: string;
     bodyFont: string;
+    descriptionFont: string;
+    labelFont: string;
+    helperFont: string;
+    inputFont: string;
+    buttonFont: string;
+    secondaryButtonFont: string;
+    linkFont: string;
     headingSize: number;
     bodySize: number;
     labelSize: number;
@@ -97,6 +106,28 @@ export type TradeInWidgetStyle = {
 
 export const FONT_WEIGHTS = [400, 500, 600, 700] as const;
 export type FontWeight = (typeof FONT_WEIGHTS)[number];
+
+export const FONT_KEYS = ['headingFont', 'bodyFont', 'descriptionFont', 'labelFont', 'helperFont', 'inputFont', 'buttonFont', 'secondaryButtonFont', 'linkFont'] as const;
+export type FontKey = (typeof FONT_KEYS)[number];
+export type ColorKey = keyof TradeInWidgetStyle['colors'];
+
+/**
+ * Each text element on the widget has its own font and color. Title and body reuse the
+ * original heading/body keys so configs saved before per-element styling keep their look.
+ */
+export const TEXT_ELEMENTS = {
+  title: { font: 'headingFont', color: 'heading' },
+  description: { font: 'descriptionFont', color: 'description' },
+  body: { font: 'bodyFont', color: 'text' },
+  label: { font: 'labelFont', color: 'label' },
+  helper: { font: 'helperFont', color: 'mutedText' },
+  input: { font: 'inputFont', color: 'inputText' },
+  button: { font: 'buttonFont', color: 'buttonText' },
+  secondaryButton: { font: 'secondaryButtonFont', color: 'secondaryButtonText' },
+  link: { font: 'linkFont', color: 'link' },
+} as const satisfies Record<string, { font: FontKey; color: ColorKey }>;
+export type TextElement = keyof typeof TEXT_ELEMENTS;
+export const TEXT_COLOR_KEYS: readonly ColorKey[] = Object.values(TEXT_ELEMENTS).map((e) => e.color);
 
 export type StyleSection = Exclude<keyof TradeInWidgetStyle, 'version' | 'theme'>;
 export const STYLE_SECTIONS: readonly StyleSection[] = ['colors', 'typography', 'buttons', 'layout', 'surfaces', 'content'];
@@ -187,6 +218,18 @@ export function fontWeightFromShorthand(shorthand: string): string | undefined {
   return match ? match[1].toLowerCase() : undefined;
 }
 
+/** Returns 'italic' when a CSS font shorthand starts with italic/oblique. */
+export function fontStyleFromShorthand(shorthand: string): 'italic' | undefined {
+  return /^\s*(?:italic|oblique)\b/i.test(shorthand ?? '') ? 'italic' : undefined;
+}
+
+/** Extracts font size in px (e.g. 24 from "normal normal 700 24px/1.4em ...") from a CSS font shorthand. */
+export function fontSizeFromShorthand(shorthand: string): number | undefined {
+  if (!shorthand || shorthand.length > 300) return undefined;
+  const match = /(?:^|\s)(\d+(?:\.\d+)?)px(?:\/\S+)?\s/.exec(shorthand.trim());
+  return match ? Number(match[1]) : undefined;
+}
+
 export function clampRange(key: RangeKey, value: number): number {
   const [min, max] = RANGES[key];
   const step = key === 'typography.lineHeight' || key === 'typography.letterSpacing' ? 100 : 1;
@@ -206,6 +249,13 @@ const BASE: Omit<TradeInWidgetStyle, 'theme' | 'colors'> = {
   typography: {
     headingFont: '',
     bodyFont: '',
+    descriptionFont: '',
+    labelFont: '',
+    helperFont: '',
+    inputFont: '',
+    buttonFont: '',
+    secondaryButtonFont: '',
+    linkFont: '',
     headingSize: 26,
     bodySize: 16,
     labelSize: 14,
@@ -236,7 +286,10 @@ const BASE: Omit<TradeInWidgetStyle, 'theme' | 'colors'> = {
   },
 };
 
-const PALETTES: Record<ThemeName, TradeInWidgetStyle['colors']> = {
+// Description and label colors are derived from help text and body text in themeDefaults().
+type Palette = Omit<TradeInWidgetStyle['colors'], 'description' | 'label'>;
+
+const PALETTES: Record<ThemeName, Palette> = {
   default: {
     primary: '#1F5EFF', background: '#FFFFFF', surface: '#F7F8FA', heading: '#111827', text: '#1F2937', mutedText: '#5B6472',
     border: '#D7DCE3', inputBackground: '#FFFFFF', inputText: '#111827', buttonBackground: '#1F5EFF', buttonText: '#FFFFFF',
@@ -280,13 +333,31 @@ const THEME_OVERRIDES: Partial<Record<ThemeName, DeepPartial<TradeInWidgetStyle>
 };
 
 export function themeDefaults(theme: ThemeName = DEFAULT_THEME, kind?: WidgetKind): TradeInWidgetStyle {
-  const base = structuredClone({ ...BASE, theme, colors: PALETTES[theme] }) as TradeInWidgetStyle;
+  const palette = PALETTES[theme];
+  const colors = { ...palette, description: palette.mutedText, label: palette.text };
+  const base = structuredClone({ ...BASE, theme, colors }) as TradeInWidgetStyle;
   if (kind === 'product-cta') {
     base.layout.alignment = 'start';
     base.colors.background = 'transparent';
     base.buttons.borderWidth = 0;
+    base.buttons.fullWidth = true;
   }
   return deepMerge(base, THEME_OVERRIDES[theme] ?? {});
+}
+
+/** Puts one text element's font and color back to the theme default. */
+export function resetTextElement(style: TradeInWidgetStyle, element: TextElement, kind?: WidgetKind): TradeInWidgetStyle {
+  const d = themeDefaults(style.theme, kind);
+  const { font, color } = TEXT_ELEMENTS[element];
+  return { ...style, typography: { ...style.typography, [font]: d.typography[font] }, colors: { ...style.colors, [color]: d.colors[color] } };
+}
+
+/** Resets all text settings: every element's font and color plus the remaining typography. */
+export function resetText(style: TradeInWidgetStyle, kind?: WidgetKind): TradeInWidgetStyle {
+  const d = themeDefaults(style.theme, kind);
+  const colors = { ...style.colors };
+  for (const k of TEXT_COLOR_KEYS) colors[k] = d.colors[k];
+  return { ...style, typography: d.typography, colors };
 }
 
 /** Defaults for a section in the given theme (used by per-section reset). */
@@ -314,8 +385,7 @@ function buildSchema(fb: TradeInWidgetStyle) {
       .catch(fb.colors),
     typography: z
       .object({
-        headingFont: font(t.headingFont),
-        bodyFont: font(t.bodyFont),
+        ...(Object.fromEntries(FONT_KEYS.map((k) => [k, font(t[k])])) as Record<FontKey, ReturnType<typeof font>>),
         headingSize: num('typography.headingSize', t.headingSize),
         bodySize: num('typography.bodySize', t.bodySize),
         labelSize: num('typography.labelSize', t.labelSize),
@@ -407,6 +477,19 @@ export function migrate(raw: Unknown): Unknown {
       typography: { ...(raw.typography as Unknown | undefined), ...(legacy.fontFamily !== undefined ? { bodyFont: legacy.fontFamily, headingFont: legacy.fontFamily } : {}) },
     };
   }
+  // Colors added after v1 start from the color those texts used before, so customized
+  // help/body text colors keep applying to descriptions and labels.
+  const colors = out.colors as Unknown | undefined;
+  if (colors && typeof colors === 'object') {
+    out = {
+      ...out,
+      colors: {
+        ...(colors.mutedText !== undefined && colors.description === undefined ? { description: colors.mutedText } : {}),
+        ...(colors.text !== undefined && colors.label === undefined ? { label: colors.text } : {}),
+        ...colors,
+      },
+    };
+  }
   return out;
 }
 
@@ -444,7 +527,7 @@ export function applyTheme(style: TradeInWidgetStyle, theme: ThemeName, kind?: W
 
 /** All font shorthands the widget renders with, for widget.setPreloadFonts (which overwrites each call). */
 export function fontsToPreload(style: TradeInWidgetStyle): string[] {
-  return [...new Set([style.typography.headingFont, style.typography.bodyFont].filter(Boolean))];
+  return [...new Set(FONT_KEYS.map((k) => style.typography[k]).filter(Boolean))];
 }
 
 // ---- utils ---------------------------------------------------------------------

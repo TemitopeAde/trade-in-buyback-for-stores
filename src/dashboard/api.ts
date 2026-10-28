@@ -59,6 +59,7 @@ export const adminApi = {
   notifications: (tradeInId?: string) => call<{ preferences: Settings['notifications']; history: NotificationLogEntry[]; currentUserId: string }>('/api/admin/notifications', { query: { tradeInId } }),
   saveNotifications: (preferences: Settings['notifications']) => call<{ preferences: Settings['notifications'] }>('/api/admin/notifications', { method: 'POST', body: { preferences } }),
   retryCredit: (tradeInId: string) => call<AdminTradeInDetail>('/api/admin/credit-retry', { method: 'POST', body: { tradeInId } }),
+  sendGiftCardEmail: (tradeInId: string) => call<AdminTradeInDetail>('/api/admin/gift-card-email', { method: 'POST', body: { tradeInId } }),
   process: () => call<{ done: number; failed: number }>('/api/admin/process', { method: 'POST', body: {} }),
   outbox: () => call<{ giftCardsAvailable: boolean; dead: DeadJob[] }>('/api/admin/outbox'),
   createResale: (tradeInId: string) => call<AdminTradeInDetail>('/api/admin/resale', { method: 'POST', body: { tradeInId } }),

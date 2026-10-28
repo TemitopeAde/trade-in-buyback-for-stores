@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { members } from '@wix/members';
 import { multilingual, window as wixWindow } from '@wix/site-window';
 import { resolveLocale } from '../../../lib/i18n';
 
@@ -24,6 +25,16 @@ export function useSiteEnv(): SiteEnv {
     };
   }, []);
   return env;
+}
+
+/** The signed-in member's login email, or undefined for visitors. Used only to prefill the form. */
+export async function currentMemberEmail(): Promise<string | undefined> {
+  try {
+    const { member } = await members.getCurrentMember({ fieldsets: ['EXTENDED'] });
+    return member?.loginEmail ?? undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Reads a query parameter from the host page URL (live site only). */

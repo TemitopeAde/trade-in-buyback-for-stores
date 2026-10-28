@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="common.css">
+<style>
+  .browser { left: 60px; width: 1080px; top: 120px; bottom: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+  .view { background: #e9ebef !important; }
+  /* Widget on the editor canvas: the real form with the Brand preset, page header cropped off */
+  .canvas { position: absolute; left: 60px; top: 30px; width: 640px; bottom: 0; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,.08); }
+  .canvas .crop { position: absolute; inset: 0; }
+  .canvas .crop img { width: 816px; left: -88px; top: -60px; }
+  .sel { position: absolute; left: 60px; top: 30px; width: 640px; bottom: -4px; border: 2px solid #3b82f6; pointer-events: none; }
+  .sel span { position: absolute; top: -24px; left: -2px; background: #3b82f6; color: #fff; font-size: 11px; padding: 4px 8px; border-radius: 3px 3px 0 0; }
+  /* Real settings panel */
+  .panel { position: absolute; right: 50px; top: 22px; width: 300px; height: 640px; overflow: hidden; border-radius: 10px; background: #fff; box-shadow: 0 12px 34px rgba(0,0,0,.2); }
+  .panel img { width: 300px; display: block; }
+  .panel::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 70px; background: linear-gradient(rgba(255,255,255,0), #fff); }
+</style>
+</head>
+<body>
+  <div class="caption">Match your brand with design controls in the Editor</div>
+  <div class="browser">
+    <div class="bar"><i></i><i></i><i></i><div class="url">Site editor · Trade-in page</div></div>
+    <div class="view">
+      <div class="canvas"><div class="crop"><img src="../harness/raw/form-brand.png" alt=""></div></div>
+      <div class="sel"><span>Trade-in form</span></div>
+      <div class="panel"><img src="../harness/raw/panel.png" alt=""></div>
+    </div>
+  </div>
+</body>
+</html>

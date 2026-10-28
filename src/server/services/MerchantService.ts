@@ -102,6 +102,7 @@ export class MerchantService {
       returnStatus: doc.returnStatus,
       giftCardId: doc.giftCardId,
       giftCardIssuedAt: iso(doc.giftCardIssuedAt),
+      giftCardEmailStatus: doc.giftCardEmailStatus,
       resaleProductId: doc.resaleProductId,
       resaleDraftStatus: doc.resaleDraftStatus,
       notes: (doc.internalNotes ?? []).map((n) => ({ id: n.id, text: n.text, createdAt: n.createdAt })),
@@ -200,6 +201,11 @@ export class MerchantService {
     const recent = await this.d.repo.find<TradeInEventDoc>(COLLECTIONS.events, { instanceId }, { sort: [{ field: '_createdDate', order: 'desc' }], limit: 10 });
     const settings = await this.d.settings.get(instanceId);
     const catalogVersion = await this.d.catalogVersion(instanceId).catch(() => 'UNKNOWN');
+    // Wix gift card emails fail without a premium plan and there's no API to check that up front,
+    // so the latest attempt is the signal.
+    const lastEmail = settings.credit.sendGiftCardEmail
+      ? (await this.d.repo.find<TradeInDoc>(COLLECTIONS.tradeIns, { instanceId, giftCardEmailStatus: { $in: ['sent', 'failed'] } }, { sort: [{ field: 'giftCardEmailAt', order: 'desc' }], limit: 1 })).items[0]
+      : undefined;
     return {
       counts,
       creditIssuedMinorByCurrency,
@@ -213,6 +219,7 @@ export class MerchantService {
         statusPageConfigured: !!settings.pages.statusPageUrl,
         pluginPlaced: this.d.pluginPlaced ? await this.d.pluginPlaced().catch(() => false) : undefined,
         giftCardsAvailable: this.d.giftCardsAvailable ? await this.d.giftCardsAvailable().catch(() => false) : undefined,
+        giftCardEmailWorking: lastEmail ? lastEmail.giftCardEmailStatus === 'sent' : undefined,
         emailConfigured: settings.notifications.staffUserIds.length > 0,
       },
     };

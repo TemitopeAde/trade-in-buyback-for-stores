@@ -27,5 +27,11 @@ import appInstalled from './extensions/backend/events/app-installed/app-installe
 
 import tradeInAria from './extensions/backend/service-plugins/trade-in-aria/trade-in-aria.extension.ts';
 
+import tradeInFormBlock from './extensions/site/components/trade-in-form-block/trade-in-form-block.extension.ts';
+
+import tradeInStatusBlock from './extensions/site/components/trade-in-status-block/trade-in-status-block.extension.ts';
+
+import myTradeInsBlock from './extensions/site/components/my-trade-ins-block/my-trade-ins-block.extension.ts';
+
 export default app()
-  .use(tradeInsPage).use(dataCollections).use(tradeInForm).use(tradeInStatus).use(myTradeIns).use(tradeInProductCta).use(mediaFileReady).use(mediaFileFailed).use(outboxItemCreated).use(emailTransmissionUpdated).use(tradeInTools).use(appRemoved).use(appInstalled).use(tradeInAria);
+  .use(tradeInsPage).use(dataCollections).use(tradeInForm).use(tradeInStatus).use(myTradeIns).use(tradeInProductCta).use(mediaFileReady).use(mediaFileFailed).use(outboxItemCreated).use(emailTransmissionUpdated).use(tradeInTools).use(appRemoved).use(appInstalled).use(tradeInAria).use(tradeInFormBlock).use(tradeInStatusBlock).use(myTradeInsBlock);

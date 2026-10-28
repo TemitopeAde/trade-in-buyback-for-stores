@@ -1,4 +1,4 @@
-import type { TradeInStatus } from '../../lib/lifecycle';
+import type { ActorType, TradeInAction, TradeInStatus } from '../../lib/lifecycle';
 import type { CustomerNotificationEvent, MerchantNotificationEvent } from '../../lib/schemas/domain';
 import type { TradeInDoc } from '../types';
 import type { CreditService } from './CreditService';
@@ -7,13 +7,13 @@ import type { OutboxDoc, OutboxService } from './OutboxService';
 import type { SettingsService } from './SettingsService';
 import type { TradeInLifecycleService } from './TradeInLifecycleService';
 import type { TradeInMediaService } from './TradeInMediaService';
-import type { WixGiftCardsService } from './WixGiftCardsService';
 
 // Turns committed domain events into side effects. Each handler is idempotent (notifications
 // dedupe per event+recipient, credit dedupes per trade-in), so outbox retries and duplicate
 // webhook deliveries are safe. Throwing makes the outbox retry with backoff.
 
 const CUSTOMER_ON_ENTER: Partial<Record<TradeInStatus, CustomerNotificationEvent>> = {
+  cancelled: 'cancellation',
   approved: 'approved',
   rejected: 'rejected',
   received: 'received',
@@ -30,13 +30,29 @@ const MERCHANT_ON_ENTER: Partial<Record<TradeInStatus, MerchantNotificationEvent
   revised_offer_declined: 'revised_offer_declined',
 };
 
+type Change = { action?: TradeInAction; actorType?: ActorType; from: TradeInStatus; to: TradeInStatus };
+
+// Statuses whose email depends on how they were reached.
+function customerEventFor(c: Change): CustomerNotificationEvent | undefined {
+  // Declining a revised offer also enters return_pending; its decision email already covers the return.
+  if (c.to === 'return_pending') return c.action === 'reject_after_inspection' ? 'return_started' : undefined;
+  // Closing after credit was issued or a rejection needs no email; closing a return confirms it.
+  if (c.to === 'closed') return c.from === 'return_pending' ? 'returned' : undefined;
+  return CUSTOMER_ON_ENTER[c.to];
+}
+
+function merchantEventFor(c: Change): MerchantNotificationEvent | undefined {
+  // Staff who mark an item in transit themselves don't need to hear about it.
+  if (c.to === 'in_transit') return c.actorType === 'customer' ? 'shipped' : undefined;
+  return MERCHANT_ON_ENTER[c.to];
+}
+
 type Deps = {
   lifecycle: TradeInLifecycleService;
   settings: SettingsService;
   notifications: NotificationService;
   credit: CreditService;
   media: TradeInMediaService;
-  giftCards: Pick<WixGiftCardsService, 'sendEmail'>;
   outbox: OutboxService;
 };
 
@@ -72,8 +88,11 @@ export class OutboxProcessor {
           return;
         }
         const doc = await load();
-        for (const status of entered) {
-          await this.notifyBoth(event, doc, settings, CUSTOMER_ON_ENTER[status], MERCHANT_ON_ENTER[status], status);
+        const action = event.payload.action as TradeInAction | undefined;
+        for (let i = 1; i < path.length; i++) {
+          // Only the first step is the actor's; later steps are automatic follow-ups.
+          const change: Change = { action: i === 1 ? action : undefined, actorType: i === 1 ? (event.payload.actorType as ActorType | undefined) : 'system', from: path[i - 1], to: path[i] };
+          await this.notifyBoth(event, doc, settings, customerEventFor(change), merchantEventFor(change), change.to, change.actorType);
         }
         if (entered.some((s) => s === 'closed' || s === 'cancelled')) {
           await this.d.media.scheduleRetention(instanceId, tradeInId, settings.mediaRetentionDays);
@@ -81,14 +100,17 @@ export class OutboxProcessor {
         return;
       }
       case 'gift_card.issued': {
-        const doc = await load();
-        if (settings.credit.sendGiftCardEmail && doc.giftCardId) {
-          // Wix's own gift card email carries the code; failure here (e.g. no premium plan) is
-          // logged on the timeline but never blocks the credit itself.
-          await this.d.giftCards.sendEmail(doc.giftCardId, doc.customerEmail).then(
-            () => this.d.lifecycle.recordEvent({ instanceId, tradeInId, eventType: 'gift_card.email_sent', actorType: 'system' }),
-            (err) => this.d.lifecycle.recordEvent({ instanceId, tradeInId, eventType: 'gift_card.email_failed', actorType: 'system', metadataSanitized: { code: (err as Error).message } }),
-          );
+        let doc = await load();
+        // Wix's own gift card email carries the code; its outcome (e.g. failed without a premium
+        // plan) picks the wording of the notifications below but never blocks the credit. Once
+        // claimed it isn't repeated, so an outbox retry doesn't email the code twice.
+        if (!doc.giftCardEmailStatus && doc.giftCardId) {
+          doc = settings.credit.sendGiftCardEmail
+            ? await this.d.credit.emailGiftCard(instanceId, tradeInId, { type: 'system' }, { once: true })
+            : await this.d.lifecycle.mutate({
+              instanceId, tradeInId, actor: { type: 'system' }, eventType: 'gift_card.email_skipped', retries: 2,
+              change: (cur) => (cur.giftCardEmailStatus ? null : { giftCardEmailStatus: 'disabled' }),
+            });
         }
         await this.notifyBoth(event, doc, settings, 'credit_issued', 'credit_issued');
         return;
@@ -121,10 +143,11 @@ export class OutboxProcessor {
     customer: CustomerNotificationEvent | undefined,
     merchant: MerchantNotificationEvent | undefined,
     suffix = '',
+    actorType?: ActorType,
   ) {
     // eventId is per outbox event (+ status when one event entered several statuses).
     const eventId = suffix ? `${event._id}:${suffix}` : event._id;
-    if (customer) await this.d.notifications.notify({ eventId, doc, settings, target: { kind: 'customer', event: customer } });
-    if (merchant) await this.d.notifications.notify({ eventId, doc, settings, target: { kind: 'merchant', event: merchant } });
+    if (customer) await this.d.notifications.notify({ eventId, doc, settings, actorType, target: { kind: 'customer', event: customer } });
+    if (merchant) await this.d.notifications.notify({ eventId, doc, settings, actorType, target: { kind: 'merchant', event: merchant } });
   }
 }

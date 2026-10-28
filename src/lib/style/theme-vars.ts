@@ -1,4 +1,4 @@
-import { fontFamilyFromShorthand, fontWeightFromShorthand, safeFontShorthand, type TradeInWidgetStyle } from './style-config';
+import { clampRange, fontFamilyFromShorthand, fontSizeFromShorthand, fontStyleFromShorthand, fontWeightFromShorthand, safeFontShorthand, type TradeInWidgetStyle } from './style-config';
 
 // Maps a validated style config to CSS custom properties. The same mapping is used in the
 // Editor preview and on the live site, so both render identically. Values are only ever
@@ -8,23 +8,58 @@ const BUTTON_RADIUS = { square: '0px', 'slightly-rounded': '6px', rounded: '12px
 const BUTTON_PADDING = { small: '8px 14px', medium: '11px 20px', large: '14px 28px' } as const;
 const SHADOW = { none: 'none', subtle: '0 1px 3px rgba(16,24,40,.08), 0 1px 2px rgba(16,24,40,.04)', medium: '0 8px 24px rgba(16,24,40,.12)' } as const;
 
+// The heading size and weight come from the picked font's shorthand when it has them.
+function headingSize(style: TradeInWidgetStyle): number {
+  const size = fontSizeFromShorthand(style.typography.headingFont);
+  return size === undefined ? style.typography.headingSize : clampRange('typography.headingSize', size);
+}
+
 export type ThemeVars = Record<`--ti-${string}`, string>;
+
+/**
+ * Family/size/weight/style vars for one text element's picked font. Unset parts are left
+ * out so the CSS `var(--…, inherit)` fallbacks apply; `fallback` covers parts that had a
+ * fixed default before per-element fonts existed.
+ */
+function textFontVars(name: string, shorthand: string, fallback: { size?: string; weight?: string } = {}): ThemeVars {
+  const px = fontSizeFromShorthand(shorthand);
+  const parts: Record<string, string | undefined> = {
+    family: fontFamilyFromShorthand(shorthand),
+    size: px === undefined ? fallback.size : `${Math.min(72, Math.max(8, px))}px`,
+    weight: fontWeightFromShorthand(shorthand) ?? fallback.weight,
+    style: fontStyleFromShorthand(shorthand),
+  };
+  return Object.fromEntries(Object.entries(parts).filter(([, v]) => v !== undefined).map(([k, v]) => [`--ti-${name}-${k}`, v])) as ThemeVars;
+}
 
 export function styleToCssVars(style: TradeInWidgetStyle): ThemeVars {
   const { colors: c, typography: t, buttons: b, layout: l, surfaces: s } = style;
   const bodyFont = safeFontShorthand(t.bodyFont) ?? 'inherit';
   const headingFamily = fontFamilyFromShorthand(t.headingFont) ?? (fontFamilyFromShorthand(t.bodyFont) ?? 'inherit');
+  const modalBodyFamily = fontFamilyFromShorthand(t.bodyFont) ?? 'Helvetica, Arial, sans-serif';
+  const modalHeadingFamily = fontFamilyFromShorthand(t.headingFont) ?? modalBodyFamily;
   const cardBorder =
     l.cardStyle === 'flat' || !s.showCardBorder ? 'none' : `${s.borderWidth}px solid ${c.border}`;
   const cardShadow = l.cardStyle === 'elevated' ? SHADOW[s.shadow === 'none' ? 'subtle' : s.shadow] : SHADOW[s.shadow];
 
+  const buttonWeight = fontWeightFromShorthand(t.bodyFont) ?? String(b.textWeight);
+
   return {
+    ...textFontVars('description', t.descriptionFont),
+    ...textFontVars('label', t.labelFont, { size: `${t.labelSize}px`, weight: '600' }),
+    ...textFontVars('helper', t.helperFont, { size: `${t.helperSize}px` }),
+    ...textFontVars('input', t.inputFont),
+    ...textFontVars('btn', t.buttonFont, { size: `${t.buttonSize}px`, weight: buttonWeight }),
+    ...textFontVars('btn2', t.secondaryButtonFont, { size: `${t.buttonSize}px`, weight: buttonWeight }),
+    ...textFontVars('link', t.linkFont),
     '--ti-primary': c.primary,
     '--ti-background': c.background,
     '--ti-surface': l.cardStyle === 'flat' ? c.background : c.surface,
     '--ti-heading': c.heading,
     '--ti-text': c.text,
     '--ti-muted': c.mutedText,
+    '--ti-description': c.description,
+    '--ti-label': c.label,
     '--ti-border': c.border,
     '--ti-input-bg': c.inputBackground,
     '--ti-input-text': c.inputText,
@@ -39,14 +74,17 @@ export function styleToCssVars(style: TradeInWidgetStyle): ThemeVars {
     '--ti-link': c.link,
     '--ti-font-body': bodyFont,
     '--ti-font-heading': headingFamily,
-    '--ti-size-heading': `${t.headingSize}px`,
+    '--ti-font-modal': modalBodyFamily,
+    '--ti-font-modal-heading': modalHeadingFamily,
+    '--ti-size-heading': `${headingSize(style)}px`,
     '--ti-size-body': `${t.bodySize}px`,
     '--ti-size-label': `${t.labelSize}px`,
     '--ti-size-helper': `${t.helperSize}px`,
     '--ti-size-button': `${t.buttonSize}px`,
-    '--ti-weight-heading': String(t.headingWeight),
+    '--ti-weight-heading': fontWeightFromShorthand(t.headingFont) ?? String(t.headingWeight),
+    '--ti-style-heading': fontStyleFromShorthand(t.headingFont) ?? 'normal',
     '--ti-weight-body': String(t.bodyWeight),
-    '--ti-weight-button': fontWeightFromShorthand(t.bodyFont) ?? String(b.textWeight),
+    '--ti-weight-button': buttonWeight,
     '--ti-line-height': String(t.lineHeight),
     '--ti-letter-spacing': `${t.letterSpacing}em`,
     '--ti-heading-align': t.headingAlign,
@@ -105,19 +143,21 @@ export function contrastRatio(fg: string, bg: string): number | undefined {
 }
 
 export type ContrastWarning = { pair: ContrastPair; ratio: number; required: number };
-export type ContrastPair = 'text_background' | 'heading_background' | 'muted_surface' | 'input' | 'button' | 'secondary_button' | 'error_background';
+export type ContrastPair = 'text_background' | 'heading_background' | 'muted_surface' | 'input' | 'button' | 'secondary_button' | 'error_background' | 'description_background' | 'label_surface';
 
 /** Pairs checked in the settings panel. Body text needs 4.5:1; large headings 3:1. */
 export function contrastWarnings(style: TradeInWidgetStyle): ContrastWarning[] {
   const c = style.colors;
   const pairs: [ContrastPair, string, string, number][] = [
     ['text_background', c.text, c.background, 4.5],
-    ['heading_background', c.heading, c.background, style.typography.headingSize >= 24 ? 3 : 4.5],
+    ['heading_background', c.heading, c.background, headingSize(style) >= 24 ? 3 : 4.5],
     ['muted_surface', c.mutedText, c.surface, 4.5],
     ['input', c.inputText, c.inputBackground, 4.5],
     ['button', c.buttonText, c.buttonBackground, 4.5],
     ['secondary_button', c.secondaryButtonText, c.secondaryButtonBackground, 4.5],
     ['error_background', c.error, c.background, 4.5],
+    ['description_background', c.description, c.background, 4.5],
+    ['label_surface', c.label, c.surface, 4.5],
   ];
   const out: ContrastWarning[] = [];
   for (const [pair, fg, bg, required] of pairs) {

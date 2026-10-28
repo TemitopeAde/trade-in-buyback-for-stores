@@ -112,6 +112,8 @@ export type CustomerTradeInView = {
   finalValueMinor?: number;
   revisedOffer?: { amountMinor: number; reason?: string; expiresAt?: string };
   rejectionReason?: string;
+  /** True when the gift card code is known not to have been emailed (the store sends it instead). */
+  giftCardCodePending?: boolean;
   handoff: { method: HandoffMethod; address?: string; instructions?: string; trackingNumber?: string; allowTracking: boolean };
   actions: (typeof CUSTOMER_ACTIONS)[number][];
   timeline: CustomerTimelineEntry[];

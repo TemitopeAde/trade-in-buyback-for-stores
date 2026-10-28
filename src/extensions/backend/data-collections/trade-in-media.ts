@@ -17,6 +17,7 @@ export default {
     { key: 'durationSeconds', type: 'NUMBER', displayName: 'Duration (seconds)' },
     { key: 'deleteAfter', type: 'DATETIME', displayName: 'Delete after' },
     { key: 'deletedAt', type: 'DATETIME', displayName: 'Deleted at' },
+    { key: 'supersededAt', type: 'DATETIME', displayName: 'Superseded at' },
   ],
   displayField: 'mediaManagerFileId',
   dataPermissions: {

@@ -34,16 +34,19 @@ import { createTranslator, resolveLocale, type MessageKey, type Translate } from
 import {
   applyTheme,
   CONTENT_KEYS_BY_WIDGET,
-  FONT_WEIGHTS,
   fontFamilyFromShorthand,
   RANGES,
+  resetText,
+  resetTextElement,
   sectionDefaults,
+  TEXT_COLOR_KEYS,
+  TEXT_ELEMENTS,
   TEXT_LIMITS,
   THEMES,
   themeDefaults,
-  type FontWeight,
   type RangeKey,
   type StyleSection,
+  type TextElement,
   type TradeInWidgetStyle,
   type WidgetKind,
 } from '../../lib/style/style-config';
@@ -63,8 +66,9 @@ export type TradeInWidgetSettingsPanelProps = {
 };
 
 type ColorKey = keyof TradeInWidgetStyle['colors'];
-const COLOR_KEYS = Object.keys(themeDefaults().colors) as ColorKey[];
-const CTA_COLOR_KEYS: ColorKey[] = ['primary', 'background', 'text', 'mutedText', 'buttonBackground', 'buttonText', 'buttonHoverBackground', 'buttonBorder', 'link'];
+// Text colors are set per element in the Text section; the theme section keeps the rest.
+const THEME_COLOR_KEYS = (Object.keys(themeDefaults().colors) as ColorKey[]).filter((k) => !TEXT_COLOR_KEYS.includes(k));
+const TEXT_ELEMENT_KEYS = Object.keys(TEXT_ELEMENTS) as TextElement[];
 
 export function TradeInWidgetSettingsPanel({ kind, defaults, planStatusOverride }: TradeInWidgetSettingsPanelProps) {
   const [locale, setLocale] = useState('en');
@@ -204,11 +208,11 @@ function PanelBody({ kind, defaults, style, update, replace, t, entitlements, is
     accordionItemBuilder({
       title: t('panel.section.typography'),
       children: (
-        <TypographySection
+        <TextSection
           style={style}
           set={set}
-          reset={() => resetSection('typography')}
-          isCta={isCta}
+          update={update}
+          kind={kind}
           t={t}
           disabledCustom={!entitlements.advancedStyling}
         />
@@ -216,7 +220,7 @@ function PanelBody({ kind, defaults, style, update, replace, t, entitlements, is
     }),
     accordionItemBuilder({ title: t('panel.section.buttons'), children: <ButtonsSection style={style} set={set} reset={() => resetSection('buttons')} t={t} /> }),
     accordionItemBuilder({ title: t('panel.section.layout'), children: <LayoutSection style={style} set={set} reset={() => resetSection('layout')} kind={kind} t={t} /> }),
-    ...(isCta ? [] : [accordionItemBuilder({ title: t('panel.section.surfaces'), children: <SurfacesSection style={style} set={set} reset={() => resetSection('surfaces')} t={t} /> })]),
+    accordionItemBuilder({ title: t('panel.section.surfaces'), children: <SurfacesSection style={style} set={set} reset={() => resetSection('surfaces')} t={t} /> }),
     accordionItemBuilder({ title: t('panel.section.content'), children: <ContentSection style={style} set={set} reset={() => resetSection('content')} kind={kind} defaults={defaults} t={t} /> }),
     ...(kind === 'form' ? [accordionItemBuilder({ title: t('panel.section.form'), children: <FormSection style={style} set={set} t={t} /> })] : []),
     accordionItemBuilder({
@@ -248,13 +252,13 @@ function Group({ children, onReset, t }: { children: ReactNode; onReset?: () => 
   );
 }
 
-function ColorField({ label, value, onChange, t, disabled, tooltip }: { label: string; value: string; onChange: (v: string) => void; t: Translate; disabled?: boolean; tooltip?: string }) {
+function ColorField({ label, name = label, value, onChange, t, disabled, tooltip }: { label: string; name?: string; value: string; onChange: (v: string) => void; t: Translate; disabled?: boolean; tooltip?: string }) {
   return (
     <FormField label={label} labelPlacement="left" labelWidth="1fr" inputWidth="30px" statusMessage={tooltip} status={disabled ? 'warning' : undefined}>
       <Box width="30px" height="30px">
         <FillPreview
           fill={value}
-          aria-label={t('panel.color.change', { name: label })}
+          aria-label={t('panel.color.change', { name })}
           disabled={disabled}
           onClick={() => {
             if (disabled) return;
@@ -348,13 +352,9 @@ function FontField({ label, value, onChange, t, disabled, tooltip }: { label: st
   );
 }
 
-const weightOptions = (t: Translate) => FONT_WEIGHTS.map((w) => ({ value: w, label: t(`panel.weight.${w}`) }));
-
 // ---- Sections --------------------------------------------------------------------
 
 function ThemeSection({ style, set, update, isCta, t, disabledCustom }: SectionProps & { update: BodyProps['update']; isCta: boolean; disabledCustom?: boolean }) {
-  const warnings = contrastWarnings(style);
-  const keys = isCta ? CTA_COLOR_KEYS : COLOR_KEYS;
   return (
     <Group t={t}>
       <Select
@@ -364,7 +364,7 @@ function ThemeSection({ style, set, update, isCta, t, disabledCustom }: SectionP
         onChange={(theme) => update((s) => applyTheme(s, theme, isCta ? 'product-cta' : undefined))}
       />
       <Text size="tiny" secondary>{t('panel.theme.applyNote')}</Text>
-      {keys.map((k) => (
+      {THEME_COLOR_KEYS.map((k) => (
         <ColorField
           key={k}
           label={t(`panel.color.${k}`)}
@@ -375,51 +375,76 @@ function ThemeSection({ style, set, update, isCta, t, disabledCustom }: SectionP
           tooltip={disabledCustom ? t('panel.plan.requiresPro') : undefined}
         />
       ))}
-      {warnings.length > 0 && (
-        <SectionHelper appearance="warning" title={t('panel.contrast.title')}>
-          {warnings.map((w) => (
-            <div key={w.pair}>{t('panel.contrast.warning', { pair: t(`panel.contrast.${w.pair}`), ratio: w.ratio, required: w.required })}</div>
-          ))}
-        </SectionHelper>
-      )}
-      <TextButton size="small" onClick={() => update((s) => ({ ...s, colors: sectionDefaults(s.theme, 'colors', isCta ? 'product-cta' : undefined) }))}>{t('panel.resetToTheme')}</TextButton>
+      <ContrastWarnings style={style} t={t} />
+      <TextButton
+        size="small"
+        onClick={() => update((s) => {
+          const d = sectionDefaults(s.theme, 'colors', isCta ? 'product-cta' : undefined);
+          return { ...s, colors: { ...d, ...Object.fromEntries(TEXT_COLOR_KEYS.map((k) => [k, s.colors[k]])) } };
+        })}
+      >
+        {t('panel.resetToTheme')}
+      </TextButton>
     </Group>
   );
 }
 
-function TypographySection({ style, set, reset, isCta, t, disabledCustom }: SectionProps & { isCta: boolean; disabledCustom?: boolean }) {
-  const ty = style.typography;
+function ContrastWarnings({ style, t }: { style: TradeInWidgetStyle; t: Translate }) {
+  const warnings = contrastWarnings(style);
+  if (!warnings.length) return null;
   return (
-    <Group t={t} onReset={reset}>
-      {!isCta && (
-        <FontField
-          label={t('panel.font.heading')}
-          value={ty.headingFont}
-          onChange={(v) => set('typography', 'headingFont', v)}
-          t={t}
-          disabled={disabledCustom}
-          tooltip={disabledCustom ? t('panel.plan.requiresPro') : undefined}
-        />
-      )}
-      <FontField
-        label={t('panel.font.body')}
-        value={ty.bodyFont}
-        onChange={(v) => set('typography', 'bodyFont', v)}
-        t={t}
-        disabled={disabledCustom}
-        tooltip={disabledCustom ? t('panel.plan.requiresPro') : undefined}
+    <SectionHelper appearance="warning" title={t('panel.contrast.title')}>
+      {warnings.map((w) => (
+        <div key={w.pair}>{t('panel.contrast.warning', { pair: t(`panel.contrast.${w.pair}`), ratio: w.ratio, required: w.required })}</div>
+      ))}
+    </SectionHelper>
+  );
+}
+
+function TextSection({ style, set, update, kind, t, disabledCustom }: SectionProps & { update: BodyProps['update']; kind: WidgetKind }) {
+  const tooltip = disabledCustom ? t('panel.plan.requiresPro') : undefined;
+  return (
+    <Group t={t}>
+      <Text size="tiny" secondary>{t('panel.text.note')}</Text>
+      {TEXT_ELEMENT_KEYS.map((el) => {
+        const { font, color } = TEXT_ELEMENTS[el];
+        const name = t(`panel.text.${el}`);
+        return (
+          <Box key={el} direction="vertical" gap="SP2" paddingTop="SP2" dataHook={`text-element-${el}`}>
+            <Text size="small" weight="bold">{name}</Text>
+            <ColorField
+              label={t('panel.text.color')}
+              name={name}
+              value={style.colors[color]}
+              onChange={(v) => set('colors', color, v)}
+              t={t}
+              disabled={disabledCustom}
+              tooltip={tooltip}
+            />
+            <FontField
+              label={t('panel.text.font')}
+              value={style.typography[font]}
+              onChange={(v) => set('typography', font, v)}
+              t={t}
+              disabled={disabledCustom}
+              tooltip={tooltip}
+            />
+            <Box>
+              <TextButton size="small" ariaLabel={t('panel.text.resetAria', { name })} onClick={() => update((s) => resetTextElement(s, el, kind))}>
+                {t('panel.text.reset')}
+              </TextButton>
+            </Box>
+          </Box>
+        );
+      })}
+      <Segmented
+        label={t('panel.headingAlign')}
+        value={style.typography.headingAlign}
+        options={[{ value: 'start', label: t('panel.align.start') }, { value: 'center', label: t('panel.align.center') }]}
+        onChange={(v) => set('typography', 'headingAlign', v)}
       />
-      {!isCta && <SliderField label={t('panel.size.heading')} rangeKey="typography.headingSize" value={ty.headingSize} onChange={(v) => set('typography', 'headingSize', v)} />}
-      {!isCta && <SliderField label={t('panel.size.label')} rangeKey="typography.labelSize" value={ty.labelSize} onChange={(v) => set('typography', 'labelSize', v)} />}
-      {!isCta && <Select label={t('panel.weight.heading')} value={ty.headingWeight} options={weightOptions(t)} onChange={(v) => set('typography', 'headingWeight', v as FontWeight)} />}
-      {!isCta && (
-        <Segmented
-          label={t('panel.headingAlign')}
-          value={ty.headingAlign}
-          options={[{ value: 'start', label: t('panel.align.start') }, { value: 'center', label: t('panel.align.center') }]}
-          onChange={(v) => set('typography', 'headingAlign', v)}
-        />
-      )}
+      <ContrastWarnings style={style} t={t} />
+      <TextButton size="small" onClick={() => update((s) => resetText(s, kind))}>{t('panel.text.resetAll')}</TextButton>
     </Group>
   );
 }
@@ -460,7 +485,7 @@ function LayoutSection({ style, set, reset, kind, t }: SectionProps & { kind: Wi
     <Group t={t} onReset={reset}>
       {!isCta && <SliderField label={t('panel.layout.maxWidth')} rangeKey="layout.maxWidth" value={l.maxWidth} onChange={(v) => set('layout', 'maxWidth', v)} />}
       {!isCta && <SliderField label={t('panel.layout.padding')} rangeKey="layout.padding" value={l.padding} onChange={(v) => set('layout', 'padding', v)} />}
-      {!isCta && <SliderField label={t('panel.layout.sectionGap')} rangeKey="layout.sectionGap" value={l.sectionGap} onChange={(v) => set('layout', 'sectionGap', v)} />}
+      <SliderField label={t('panel.layout.sectionGap')} rangeKey="layout.sectionGap" value={l.sectionGap} onChange={(v) => set('layout', 'sectionGap', v)} />
       {kind === 'form' && <SliderField label={t('panel.layout.fieldGap')} rangeKey="layout.fieldGap" value={l.fieldGap} onChange={(v) => set('layout', 'fieldGap', v)} />}
       <SliderField label={isCta ? t('panel.layout.spacing') : t('panel.layout.buttonGap')} rangeKey="layout.buttonGap" value={l.buttonGap} onChange={(v) => set('layout', 'buttonGap', v)} />
       <Segmented
@@ -469,14 +494,12 @@ function LayoutSection({ style, set, reset, kind, t }: SectionProps & { kind: Wi
         options={[{ value: 'start', label: t('panel.align.start') }, { value: 'center', label: t('panel.align.center') }]}
         onChange={(v) => set('layout', 'alignment', v)}
       />
-      {!isCta && (
-        <Select
-          label={t('panel.layout.cardStyle')}
-          value={l.cardStyle}
-          options={(['flat', 'bordered', 'elevated'] as const).map((v) => ({ value: v, label: t(`panel.layout.cardStyle.${v}`) }))}
-          onChange={(v) => set('layout', 'cardStyle', v)}
-        />
-      )}
+      <Select
+        label={t('panel.layout.cardStyle')}
+        value={l.cardStyle}
+        options={(['flat', 'bordered', 'elevated'] as const).map((v) => ({ value: v, label: t(`panel.layout.cardStyle.${v}`) }))}
+        onChange={(v) => set('layout', 'cardStyle', v)}
+      />
       {kind === 'form' && (
         <Select
           label={t('panel.layout.stepIndicator')}

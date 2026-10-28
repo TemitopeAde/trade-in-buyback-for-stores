@@ -1,4 +1,5 @@
 import { createTranslator } from '../../lib/i18n';
+import type { ActorType } from '../../lib/lifecycle';
 import type { CustomerNotificationEvent, MerchantNotificationEvent, Settings } from '../../lib/schemas/domain';
 import { COLLECTIONS } from '../collections';
 import { sha256Hex } from '../crypto';
@@ -46,7 +47,7 @@ export class NotificationService {
    * Sends one notification for an outbox event. Throws on retryable failures so the outbox
    * retries with backoff; definite failures are recorded and not retried.
    */
-  async notify(p: { eventId: string; doc: TradeInDoc; settings: Settings; target: Target }): Promise<NotificationStatus> {
+  async notify(p: { eventId: string; doc: TradeInDoc; settings: Settings; target: Target; actorType?: ActorType }): Promise<NotificationStatus> {
     const { doc, settings, target } = p;
     const prefs = target.kind === 'customer' ? settings.notifications.customer : settings.notifications.merchant;
     const enabled = (prefs as Record<string, boolean>)[target.event] !== false;
@@ -84,9 +85,9 @@ export class NotificationService {
       const statusUrl = settings.pages.statusPageUrl
         ? withToken(settings.pages.statusPageUrl, await this.tokens.mint(doc.instanceId, doc._id, `email:${target.event}`))
         : undefined;
-      content = customerEmail(target.event, { doc, locale, storeName, statusUrl });
+      content = customerEmail(target.event, { doc, locale, storeName, statusUrl, actorType: p.actorType });
     } else {
-      content = merchantEmail(target.event, { doc, locale, storeName });
+      content = merchantEmail(target.event, { doc, locale, storeName, actorType: p.actorType });
     }
 
     const attemptCount = record.attemptCount + 1;

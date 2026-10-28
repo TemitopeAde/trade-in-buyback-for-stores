@@ -133,10 +133,12 @@ export function RequestDetailPage({ id }: { id: string }) {
                 {d.rejectionReason && <Row label={t('dash.detail.rejection')} value={d.rejectionReason} />}
                 {d.inspectionNotes && <Row label={t('dash.detail.inspectionNotes')} value={d.inspectionNotes} />}
                 <Row label={t('dash.detail.credit')} value={t(`dash.detail.giftCard.${d.giftCardStatus as 'not_started'}`)} />
+                {d.giftCardStatus === 'issued' && <Row label={t('dash.detail.giftCardEmail')} value={t(`dash.detail.giftCardEmail.${d.giftCardEmailStatus ?? 'none'}`)} />}
               </dl>
               {d.status === 'credit_pending' && (d.giftCardStatus === 'failed' || d.giftCardStatus === 'reconcile_required' || d.giftCardStatus === 'not_started') && (
                 <CreditRetry detail={d} onUpdated={setData} />
               )}
+              {d.giftCardStatus === 'issued' && d.giftCardId && <GiftCardEmail detail={d} onUpdated={setData} />}
             </CardContent>
           </Card>
 
@@ -186,6 +188,29 @@ function CreditRetry({ detail, onUpdated }: { detail: AdminTradeInDetail; onUpda
         }
       }}>{t('dash.detail.retryCredit')}</Button>
       <p className="text-xs text-muted-foreground">{t('dash.detail.retryCreditHelp')}</p>
+    </div>
+  );
+}
+
+function GiftCardEmail({ detail, onUpdated }: { detail: AdminTradeInDetail; onUpdated: (d: AdminTradeInDetail) => void }) {
+  const { t, errorText } = useDashboard();
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="mt-4 grid gap-2">
+      <Button variant="outline" busy={busy} onClick={async () => {
+        setBusy(true);
+        try {
+          const next = await adminApi.sendGiftCardEmail(detail.id);
+          onUpdated(next);
+          if (next.giftCardEmailStatus === 'sent') toast.success(t('dash.detail.giftCardEmailSent'));
+          else toast.error(t('dash.detail.giftCardEmailFailed'));
+        } catch (err) {
+          toast.error(errorText(err));
+        } finally {
+          setBusy(false);
+        }
+      }}>{t(detail.giftCardEmailStatus === 'sent' ? 'dash.detail.resendGiftCardEmail' : 'dash.detail.sendGiftCardEmail')}</Button>
+      <p className="text-xs text-muted-foreground">{t('dash.detail.sendGiftCardEmailHelp', { email: detail.customerEmail })}</p>
     </div>
   );
 }

@@ -1,0 +1,42 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  /* Promotional banner: colorful brand background, no text, no logo. */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 540px; height: 360px; overflow: hidden; background: #0f5f4f; }
+  .glow { position: absolute; border-radius: 50%; filter: blur(4px); }
+  .item { position: absolute; left: 70px; top: 70px; width: 170px; height: 210px; border-radius: 16px; background: #fff; padding: 14px;
+          box-shadow: 0 18px 40px rgba(0,0,0,.3); transform: rotate(-6deg); }
+  .item .img { height: 120px; border-radius: 10px; background: linear-gradient(145deg, #eef2f7, #dfe5ee); display: flex; align-items: center; justify-content: center; }
+  .item .l { height: 10px; border-radius: 5px; background: #e5e7eb; margin-top: 14px; width: 80%; }
+  .item .l2 { height: 10px; border-radius: 5px; background: #e5e7eb; margin-top: 8px; width: 50%; }
+  .item .b { height: 18px; border-radius: 6px; background: #111827; margin-top: 12px; }
+  .gift { position: absolute; right: 60px; top: 120px; width: 200px; height: 126px; border-radius: 16px; background: linear-gradient(135deg, #34d399, #0f9f7f);
+          box-shadow: 0 18px 40px rgba(0,0,0,.35); transform: rotate(5deg); }
+  .gift .chip { position: absolute; left: 18px; top: 20px; width: 34px; height: 24px; border-radius: 5px; background: rgba(255,255,255,.4); }
+  .gift .ln { position: absolute; left: 18px; bottom: 22px; width: 110px; height: 8px; border-radius: 4px; background: rgba(255,255,255,.55); }
+  .gift .bow { position: absolute; right: 22px; top: 18px; width: 36px; height: 36px; border-radius: 50%; border: 6px solid #f5b544; }
+  svg.arrows { position: absolute; left: 205px; top: 55px; }
+</style>
+</head>
+<body>
+  <div class="glow" style="left:-80px;top:-120px;width:300px;height:300px;background:rgba(52,211,153,.18)"></div>
+  <div class="glow" style="right:-60px;bottom:-140px;width:320px;height:320px;background:rgba(245,181,68,.16)"></div>
+
+  <div class="item">
+    <div class="img">
+      <svg width="70" height="70" viewBox="0 0 120 120" fill="none" stroke="#1f2937" stroke-width="8" stroke-linecap="round"><path d="M22 72V60a38 38 0 0 1 76 0v12"/><rect x="12" y="66" width="22" height="34" rx="8" fill="#1f2937"/><rect x="86" y="66" width="22" height="34" rx="8" fill="#1f2937"/></svg>
+    </div>
+    <div class="l"></div><div class="l2"></div><div class="b"></div>
+  </div>
+
+  <svg class="arrows" width="130" height="90" viewBox="0 0 130 90" fill="none" stroke="#ffffff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M10 60 C 35 10, 85 5, 112 34"/>
+    <path d="M96 36 L114 37 L116 18"/>
+  </svg>
+
+  <div class="gift"><div class="chip"></div><div class="bow"></div><div class="ln"></div></div>
+</body>
+</html>

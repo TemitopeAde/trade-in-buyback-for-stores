@@ -45,7 +45,7 @@ describe('plans and entitlements', () => {
       expect(e.maxProductsPerRule).toBe(1);
       expect(e.resaleDrafts).toBe(false);
       expect(e.csvExport).toBe(false);
-      expect(e.advancedStyling).toBe(false);
+      expect(e.advancedStyling).toBe(true);
       expect(e.expeditedRetry).toBe(false);
       expect(e.maxReportDays).toBe(14);
     });
@@ -99,7 +99,7 @@ describe('plans and entitlements', () => {
       expect(canPerformAction('pro', 'create_resale')).toBe(true);
       expect(canPerformAction('basic', 'export_csv')).toBe(false);
       expect(canPerformAction('pro', 'export_csv')).toBe(true);
-      expect(canPerformAction('basic', 'advanced_styling')).toBe(false);
+      expect(canPerformAction('basic', 'advanced_styling')).toBe(true);
       expect(canPerformAction('business', 'advanced_styling')).toBe(true);
     });
   });

@@ -23,6 +23,8 @@ export type TradeInMediaDoc = Doc & {
   durationSeconds?: number;
   deleteAfter?: Date;
   deletedAt?: Date;
+  /** Set when a newer upload replaced this one; terminal, so it can never count toward the limit again. */
+  supersededAt?: Date;
 };
 
 export type PublicMedia = { mediaId: string; kind: MediaKind; status: MediaReadyStatus };
@@ -51,10 +53,22 @@ export class TradeInMediaService {
     const session = input.uploadSessionId ?? randomToken();
     if (!SESSION_RE.test(session)) throw new AppError('bad_request', 'bad session');
 
-    const existing = await this.repo.find<TradeInMediaDoc>(COLLECTIONS.media, { instanceId, uploadSessionId: session }, { limit: 100 });
+    const existing = await this.repo.find<TradeInMediaDoc>(COLLECTIONS.media, { instanceId, uploadSessionId: session }, { sort: [{ field: '_createdDate', order: 'asc' }], limit: 100 });
     if (existing.items.some((m) => m.tradeInId)) throw new AppError('conflict', 'session already submitted');
     if (existing.items.length >= MEDIA_LIMITS.maxUploadRequestsPerSession) throw new AppError('rate_limited', 'too many uploads');
-    const active = existing.items.filter((m) => m.mediaType === input.kind && m.readyStatus !== 'failed');
+    let active = existing.items.filter((m) => m.mediaType === input.kind && m.readyStatus !== 'failed' && !m.supersededAt);
+    if (active.length >= limits.maxCount) {
+      // If an upload was requested but not confirmed, or an unattached video is being replaced,
+      // supersede it (oldest first) so retries or replacements do not fail with too many files.
+      const replaceable = active.filter((m) => !m.tradeInId && (!m.mediaManagerFileId || input.kind === 'video'));
+      if (replaceable.length > 0) {
+        const toSupersede = replaceable.slice(0, active.length - limits.maxCount + 1);
+        const now = new Date();
+        await this.repo.bulkUpdate<TradeInMediaDoc>(COLLECTIONS.media, toSupersede.map((m) => ({ ...m, readyStatus: 'failed', supersededAt: now })));
+        const supersededIds = new Set(toSupersede.map((m) => m._id));
+        active = active.filter((m) => !supersededIds.has(m._id));
+      }
+    }
     if (active.length >= limits.maxCount) throw new AppError('bad_request', 'too many files', { file: 'count' });
 
     const media = await this.repo.insert<TradeInMediaDoc>(COLLECTIONS.media, {
@@ -77,6 +91,7 @@ export class TradeInMediaService {
   /** Client reports the Media Manager file ID returned by the upload; we verify it with Wix. */
   async confirmUpload(instanceId: string, input: { uploadSessionId: string; mediaId: string; fileId: string }): Promise<PublicMedia> {
     const media = await this.loadOwned(instanceId, input.uploadSessionId, input.mediaId);
+    if (media.supersededAt) throw new AppError('conflict', 'upload was replaced');
     if (media.mediaManagerFileId && media.mediaManagerFileId !== input.fileId) throw new AppError('conflict', 'different file already confirmed');
     const file = await this.wixMedia.getFile(input.fileId);
     if (!file) throw new AppError('bad_request', 'file not found', { file: 'missing' });
@@ -105,7 +120,7 @@ export class TradeInMediaService {
     let media: TradeInMediaDoc | null | undefined;
     if (e.mediaId) media = await this.repo.get<TradeInMediaDoc>(COLLECTIONS.media, e.mediaId);
     if (!media && e.fileId) media = (await this.repo.find<TradeInMediaDoc>(COLLECTIONS.media, { mediaManagerFileId: e.fileId }, { limit: 1 })).items[0];
-    if (!media || media.readyStatus === e.status) return;
+    if (!media || media.supersededAt || media.readyStatus === e.status) return;
     // Only advance a confirmed file; an unconfirmed record gets its fileId from confirmUpload.
     if (e.status === 'ready' && !media.mediaManagerFileId) return;
     await this.repo.update<TradeInMediaDoc>(COLLECTIONS.media, { ...media, readyStatus: e.status });
@@ -125,10 +140,11 @@ export class TradeInMediaService {
       docs = unique.map((id) => session.items.find((m) => m._id === id)).filter((m): m is TradeInMediaDoc => !!m);
       if (docs.length !== unique.length) throw new AppError('not_found');
     }
-    const usable = docs.filter((d) => !d.tradeInId && d.mediaManagerFileId && (d.readyStatus === 'ready' || d.readyStatus === 'processing'));
+    const usable = docs.filter((d) => !d.tradeInId && !d.supersededAt && d.mediaManagerFileId && (d.readyStatus === 'ready' || d.readyStatus === 'processing'));
     if (usable.length !== docs.length) throw new AppError('bad_request', 'media not uploaded', { media: 'incomplete' });
     const photos = usable.filter((d) => d.mediaType === 'photo');
     const videos = usable.filter((d) => d.mediaType === 'video');
+    if (photos.length > MEDIA_LIMITS.photo.maxCount || videos.length > MEDIA_LIMITS.video.maxCount) throw new AppError('bad_request', 'too many files', { file: 'count' });
     if (photos.length < req.photoMinimum) throw new AppError('bad_request', 'photos', { media: 'photos_min' });
     if (req.videoMode === 'required' && videos.length === 0) throw new AppError('bad_request', 'video', { media: 'video_required' });
     if (req.videoMode === 'off' && videos.length > 0) throw new AppError('bad_request', 'video not accepted', { media: 'video_off' });

@@ -43,7 +43,7 @@ export const giftCards = new WixGiftCardsService();
 export const emails = new WixEmailTransmissionsService();
 export const credit = new CreditService(lifecycle, giftCards, settings, outbox);
 export const notifications = new NotificationService(repo, emails, tokens);
-export const processor = new OutboxProcessor({ lifecycle, settings, notifications, credit, media, giftCards, outbox });
+export const processor = new OutboxProcessor({ lifecycle, settings, notifications, credit, media, outbox });
 export const merchant = new MerchantService({
   repo,
   lifecycle,

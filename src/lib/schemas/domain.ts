@@ -78,6 +78,7 @@ export const NOTIFICATION_EVENTS = {
     'cancelled',
     'approved',
     'rejected',
+    'shipped',
     'received',
     'revised_offer_accepted',
     'revised_offer_declined',
@@ -87,7 +88,7 @@ export const NOTIFICATION_EVENTS = {
     'resale_draft_failed',
     'processing_failure',
   ],
-  customer: ['submitted', 'approved', 'rejected', 'received', 'revised_offer', 'revised_offer_decision', 'credit_issued'],
+  customer: ['submitted', 'cancellation', 'approved', 'rejected', 'received', 'revised_offer', 'revised_offer_decision', 'return_started', 'returned', 'credit_issued'],
 } as const;
 export type MerchantNotificationEvent = (typeof NOTIFICATION_EVENTS.merchant)[number];
 export type CustomerNotificationEvent = (typeof NOTIFICATION_EVENTS.customer)[number];

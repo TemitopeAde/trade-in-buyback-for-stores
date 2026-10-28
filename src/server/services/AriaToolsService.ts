@@ -114,7 +114,7 @@ export class AriaToolsService {
       }
       case 'gift-card-status': {
         const doc = await this.byReference(I, payload);
-        return { status: doc.status, giftCardStatus: doc.giftCardStatus, issuedAt: doc.giftCardIssuedAt, credit: doc.finalValueMinor !== undefined ? fmt(doc.finalValueMinor, doc.currency) : undefined, note: 'Gift card codes are delivered only by Wix to the customer.' };
+        return { status: doc.status, giftCardStatus: doc.giftCardStatus, giftCardEmailStatus: doc.giftCardEmailStatus, issuedAt: doc.giftCardIssuedAt, credit: doc.finalValueMinor !== undefined ? fmt(doc.finalValueMinor, doc.currency) : undefined, note: 'Gift card codes are delivered only by Wix to the customer.' };
       }
       case 'list-rules': {
         const rules = await this.d.rules.list(I);

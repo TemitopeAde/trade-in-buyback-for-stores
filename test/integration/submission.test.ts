@@ -128,3 +128,32 @@ describe('customer submission', () => {
     expect(view.status).toBe('return_pending');
   });
 });
+
+describe('evidence upload limits', () => {
+  const fakeWixMedia = {
+    createUploadUrl: async () => ({ uploadUrl: 'https://upload.example/put' }),
+    createResumableUploadUrl: async () => ({ uploadUrl: 'https://upload.example/tus' }),
+    getFile: async () => ({ mimeTypeFamily: 'VIDEO', isPrivate: true, sizeBytes: 1000, status: 'READY' }),
+  } as unknown as WixMediaService;
+  const seedVideo = (repo: MemoryRepo) =>
+    repo.insert<TradeInMediaDoc>(COLLECTIONS.media, { instanceId: INSTANCE, uploadSessionId: SESSION, mediaType: 'video', readyStatus: 'processing', fileSize: 1000, mimeType: 'video/mp4', mediaManagerFileId: 'v-old' });
+
+  it('keeps a replaced upload out for good: it cannot be confirmed or revived by a File Ready event', async () => {
+    const repo = new MemoryRepo();
+    const media = new TradeInMediaService(repo, fakeWixMedia);
+    const old = await seedVideo(repo);
+    await media.requestUpload(INSTANCE, { uploadSessionId: SESSION, kind: 'video', mimeType: 'video/mp4', fileName: 'new.mp4', sizeBytes: 1000, durationSeconds: 5 });
+    await expect(media.confirmUpload(INSTANCE, { uploadSessionId: SESSION, mediaId: old._id, fileId: 'v-old' })).rejects.toMatchObject({ code: 'conflict' });
+    await media.markFromEvent({ mediaId: old._id, status: 'ready' });
+    expect((await repo.get<TradeInMediaDoc>(COLLECTIONS.media, old._id))!).toMatchObject({ readyStatus: 'failed' });
+    await expect(media.validateForSubmission(INSTANCE, SESSION, [old._id], { photoMinimum: 0, videoMode: 'optional', videoMaxSeconds: 60 })).rejects.toMatchObject({ code: 'bad_request' });
+  });
+
+  it('rejects a submission with more files than the per-kind limit', async () => {
+    const repo = new MemoryRepo();
+    const media = new TradeInMediaService(repo, fakeWixMedia);
+    const ids: string[] = [];
+    for (let i = 0; i < 11; i++) ids.push((await seedPhoto(repo, { mediaManagerFileId: `f${i}` }))._id);
+    await expect(media.validateForSubmission(INSTANCE, SESSION, ids, { photoMinimum: 1, videoMode: 'off', videoMaxSeconds: 60 })).rejects.toMatchObject({ code: 'bad_request', message: 'too many files' });
+  });
+});

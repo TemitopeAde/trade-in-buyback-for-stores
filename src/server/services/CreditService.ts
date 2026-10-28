@@ -12,7 +12,7 @@ import { GiftCardError, type WixGiftCardsService } from './WixGiftCardsService';
 //    to the same Wix gift card;
 //  - the ID is saved in the same revision-locked write that moves the trade-in to credit_issued.
 
-export type GiftCardsPort = Pick<WixGiftCardsService, 'issue' | 'exists'>;
+export type GiftCardsPort = Pick<WixGiftCardsService, 'issue' | 'exists' | 'sendEmail'>;
 
 export class CreditService {
   constructor(
@@ -67,6 +67,41 @@ export class CreditService {
       });
       throw new AppError(err.kind === 'not_available' ? 'unavailable' : 'precondition_failed', `gift card ${err.kind}: ${err.code}`);
     }
+  }
+
+  /**
+   * Sends Wix's gift card email (the only channel that carries the code) and records the outcome
+   * on the trade-in, so customer/merchant messaging and the dashboard reflect whether it went out.
+   * A failure is recorded, not thrown: the credit itself stands either way.
+   *
+   * `once` (automatic send): first claims the send with a revision-locked write, so a concurrent
+   * run, or a retry after the result failed to save, never emails the code a second time. A
+   * merchant resend skips the claim: it is meant to send again.
+   */
+  async emailGiftCard(instanceId: string, tradeInId: string, actor: Actor = { type: 'system' }, opts: { once?: boolean } = {}): Promise<TradeInDoc> {
+    const doc = await this.lifecycle.load(instanceId, tradeInId);
+    if (doc.giftCardStatus !== 'issued' || !doc.giftCardId) throw new AppError('precondition_failed', 'no gift card issued');
+    if (opts.once) {
+      let claimed = false;
+      const current = await this.lifecycle.mutate({
+        instanceId, tradeInId, actor, retries: 2, eventType: 'gift_card.email_sending',
+        change: (cur) => {
+          claimed = !cur.giftCardEmailStatus;
+          return claimed ? { giftCardEmailStatus: 'sending' } : null;
+        },
+      });
+      if (!claimed) return current;
+    }
+    let code: string | undefined;
+    await this.giftCards.sendEmail(doc.giftCardId, doc.customerEmail).catch((err: unknown) => {
+      code = (err instanceof Error ? err.message : String(err)) || 'UNKNOWN';
+    });
+    return this.lifecycle.mutate({
+      instanceId, tradeInId, actor, retries: 2,
+      eventType: code ? 'gift_card.email_failed' : 'gift_card.email_sent',
+      metadata: code ? { code } : undefined,
+      change: () => ({ giftCardEmailStatus: code ? 'failed' : 'sent', giftCardEmailAt: this.now() }),
+    });
   }
 }
 

@@ -3,10 +3,12 @@ import {
   applyTheme,
   DEFAULT_THEME,
   fontFamilyFromShorthand,
+  fontsToPreload,
   fontWeightFromShorthand,
   isSafeColor,
   normalizeStyleConfig,
   parseStyleConfig,
+  resetTextElement,
   serializeStyleConfig,
   THEMES,
   themeDefaults,
@@ -75,12 +77,14 @@ describe('style config', () => {
     expect(dark.content.title).toBe('Hi');
   });
 
-  it('sets transparent default background for product-cta plugin', () => {
+  it('sets transparent default background and full-width buttons for product-cta plugin', () => {
     const ctaDefaults = themeDefaults('default', 'product-cta');
     expect(ctaDefaults.colors.background).toBe('transparent');
+    expect(ctaDefaults.buttons.fullWidth).toBe(true);
 
     const darkCta = applyTheme(ctaDefaults, 'dark', 'product-cta');
     expect(darkCta.colors.background).toBe('transparent');
+    expect(darkCta.buttons.fullWidth).toBe(true);
   });
 });
 
@@ -115,10 +119,12 @@ describe('theme mapping', () => {
     const vars = styleToCssVars(themeDefaults());
     expect(vars['--ti-max-width']).toBe('min(100%, 720px)');
     expect(vars['--ti-font-body']).toBe('inherit');
+    expect(vars['--ti-font-modal']).toBe('Helvetica, Arial, sans-serif');
+    expect(vars['--ti-font-modal-heading']).toBe('Helvetica, Arial, sans-serif');
     expect(vars['--ti-weight-button']).toBe('400');
   });
 
-  it('extracts button text weight from bodyFont shorthand when present', () => {
+  it('extracts button text weight from bodyFont shorthand when present and propagates to modal font', () => {
     const custom = {
       ...themeDefaults(),
       typography: {
@@ -128,6 +134,40 @@ describe('theme mapping', () => {
     };
     const vars = styleToCssVars(custom);
     expect(vars['--ti-weight-button']).toBe('700');
+    expect(vars['--ti-font-modal']).toBe('avenir-lt-w01_85-heavy1475544, sans-serif');
+    expect(vars['--ti-font-modal-heading']).toBe('avenir-lt-w01_85-heavy1475544, sans-serif');
+  });
+
+  it('maps per-element fonts to their own CSS variables', () => {
+    const custom = normalizeStyleConfig({
+      typography: { labelFont: 'italic normal 700 18px/1.4em avenir-lt-w01_85-heavy1475544,sans-serif' },
+      colors: { label: '#123456' },
+    });
+    const vars = styleToCssVars(custom);
+    expect(vars['--ti-label-family']).toBe('avenir-lt-w01_85-heavy1475544, sans-serif');
+    expect(vars['--ti-label-size']).toBe('18px');
+    expect(vars['--ti-label-weight']).toBe('700');
+    expect(vars['--ti-label-style']).toBe('italic');
+    expect(vars['--ti-label']).toBe('#123456');
+    // Elements without a font fall back to inherited values or their previous defaults.
+    expect(vars['--ti-description-family']).toBeUndefined();
+    expect(vars['--ti-btn-size']).toBe(`${custom.typography.buttonSize}px`);
+  });
+
+  it('starts new description/label colors from customized help/body text colors', () => {
+    const s = normalizeStyleConfig({ version: 1, colors: { mutedText: '#445566', text: '#112233' } });
+    expect(s.colors.description).toBe('#445566');
+    expect(s.colors.label).toBe('#112233');
+    expect(themeDefaults().colors.description).toBe(themeDefaults().colors.mutedText);
+  });
+
+  it('resets one text element without touching the others', () => {
+    const custom = normalizeStyleConfig({ typography: { linkFont: 'normal normal 400 16px/1.4em arial', helperFont: 'normal normal 400 12px/1.4em arial' }, colors: { link: '#ff0000' } });
+    const reset = resetTextElement(custom, 'link');
+    expect(reset.typography.linkFont).toBe('');
+    expect(reset.colors.link).toBe(themeDefaults().colors.link);
+    expect(reset.typography.helperFont).toContain('arial');
+    expect(fontsToPreload(custom)).toHaveLength(2);
   });
 
   it('computes WCAG contrast and warns on poor pairs', () => {

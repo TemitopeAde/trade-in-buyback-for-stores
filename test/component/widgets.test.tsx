@@ -12,6 +12,8 @@ vi.mock('@wix/site-window', () => ({
 }));
 const fetchWithAuth = vi.fn();
 vi.mock('@wix/essentials', () => ({ httpClient: { fetchWithAuth: (...a: unknown[]) => fetchWithAuth(...a) } }));
+const currentMember = vi.fn(async () => ({ member: undefined as { loginEmail?: string } | undefined }));
+vi.mock('@wix/members', () => ({ members: { getCurrentMember: () => currentMember() } }));
 vi.mock('tus-js-client', () => ({ Upload: class {} }));
 
 const { TradeInFormWidget } = await import('../../src/components/widgets/TradeInFormWidget');
@@ -139,6 +141,19 @@ describe('TradeInFormWidget', () => {
     expect(screen.getByRole('button', { name: 'Select Product One' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Load more products' })).toBeNull();
   });
+
+  it('leaves the header and landmark to the host when embedded', async () => {
+    const { container } = render(<TradeInFormWidget embedded />);
+    await waitFor(() => expect(fetchWithAuth).toHaveBeenCalled());
+    expect(root(container).tagName).toBe('DIV');
+    expect(screen.queryByRole('heading', { name: 'Trade in your item' })).toBeNull();
+  });
+
+  it('shows the preview without data calls when the host reports design mode', async () => {
+    render(<TradeInFormWidget embedded designMode />);
+    await screen.findByText('Live trade-in data appears on your published site.');
+    expect(fetchWithAuth).not.toHaveBeenCalled();
+  });
 });
 
 describe('TradeInStatusWidget', () => {
@@ -159,10 +174,33 @@ describe('TradeInStatusWidget', () => {
     expect(screen.getByText('History')).toBeTruthy();
   });
 
-  it('shows a lookup hint when opened without a link', async () => {
+  it('shows a lookup hint to visitors opening it without a link', async () => {
+    respond({ '/api/trade-ins/mine': { items: [], signedIn: false } });
     render(<TradeInStatusWidget />);
     expect(await screen.findByText('Open the tracking link from your email to see your trade-in.')).toBeTruthy();
-    expect(fetchWithAuth).not.toHaveBeenCalled();
+    expect(fetchWithAuth.mock.calls.map(([url]) => new URL(url as string).pathname)).toEqual(['/api/trade-ins/mine']);
+  });
+
+  it('shows the signed-in member’s latest trade-in when opened without a link', async () => {
+    const row = (id: string, reference: string) => ({ tradeInId: id, reference, status: 'approved', productTitle: 'Phone', createdAt: '2026-01-01T00:00:00Z', estimatedValueMinor: 5000, currency: 'USD' });
+    const statusBodies: unknown[] = [];
+    respond({
+      '/api/trade-ins/mine': { items: [row('t2', 'TI-NEW'), row('t1', 'TI-OLD')], signedIn: true },
+      '/api/trade-ins/status': () => ({
+        tradeInId: 't2', reference: 'TI-NEW', status: 'approved', revision: 1, createdAt: '2026-01-01T00:00:00Z',
+        product: { title: 'Phone' }, currency: 'USD', estimatedValueMinor: 5000,
+        handoff: { method: 'drop_off', allowTracking: false }, actions: [], timeline: [],
+      }),
+    });
+    const impl = fetchWithAuth.getMockImplementation()!;
+    fetchWithAuth.mockImplementation(async (url: string, init?: { body?: string }) => {
+      if (init?.body) statusBodies.push(JSON.parse(init.body));
+      return impl(url);
+    });
+    render(<TradeInStatusWidget />);
+    expect(await screen.findByText('TI-NEW')).toBeTruthy();
+    expect(statusBodies[0]).toEqual({ tradeInId: 't2' });
+    expect((screen.getByLabelText('My trade-ins') as HTMLSelectElement).options).toHaveLength(2);
   });
 });
 
@@ -291,6 +329,75 @@ describe('TradeInProductButtonWidget', () => {
     expect(root).toBeTruthy();
     expect(root.style.getPropertyValue('--ti-weight-button')).toBe('400');
     expect(root.style.getPropertyValue('--ti-btn-border')).toBe('none');
+  });
+
+  it('defaults button width to full width for the plugin', async () => {
+    respond({ '/api/catalog/product-cta': { eligible: true, upToMinor: 800, currency: 'USD' } });
+    const { container } = render(<TradeInProductButtonWidget productId="p1" />);
+    await screen.findByRole('button', { name: 'Trade in' });
+
+    const root = container.querySelector('.ti-root--cta') as HTMLElement;
+    expect(root).toBeTruthy();
+    expect(root.style.getPropertyValue('--ti-btn-width')).toBe('100%');
+  });
+
+  it('renders the catalog as a table in the Trade in your item modal', async () => {
+    respond({
+      '/api/catalog/product-cta': { eligible: true, upToMinor: 800, currency: 'USD' },
+      '/api/catalog/order-items': [],
+      '/api/catalog/search': {
+        items: [
+          { productId: 'p1', title: 'Laptop Pro', imageUrl: 'https://example.com/laptop.png', source: 'catalog' },
+          { productId: 'p2', title: 'Tablet Air', imageUrl: 'https://example.com/tablet.png', source: 'catalog' },
+        ],
+        hasMore: false,
+      },
+      '/api/trade-ins/form-config': {
+        eligible: true,
+        product: { productId: 'p1', title: 'Laptop Pro' },
+        questions: [],
+        media: { photoMinimum: 0, videoMode: 'off', videoMaxSeconds: 60 },
+        handoffMethods: [{ method: 'drop_off' }],
+        termsText: 'Terms apply',
+        currency: 'USD',
+      },
+    });
+
+    render(<TradeInProductButtonWidget productId="p1" />);
+    const btn = await screen.findByRole('button', { name: 'Trade in' });
+    fireEvent.click(btn);
+
+    // Modal drawer is open
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toBeTruthy();
+
+    // Verify catalog is displayed as a table instead of a grid
+    const table = await screen.findByRole('table');
+    expect(table).toBeTruthy();
+    expect(table.classList.contains('ti-products-table')).toBe(true);
+
+    // The table is wrapped in a scrollable, accessible container
+    const tableContainer = dialog.querySelector('.ti-table-container');
+    expect(tableContainer).toBeTruthy();
+    expect(tableContainer?.getAttribute('role')).toBe('region');
+    expect(tableContainer?.getAttribute('tabIndex')).toBe('0');
+
+    // Headers are Item and Action
+    expect(screen.getByRole('columnheader', { name: 'Item' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'Action' })).toBeTruthy();
+
+    // Select button is inside table action cell
+    const selectTablet = await screen.findByRole('button', { name: 'Select Tablet Air' });
+    expect(selectTablet).toBeTruthy();
+    expect(selectTablet.getAttribute('aria-pressed')).toBe('false');
+
+    // Table rows for products (header + 2 items)
+    const rows = screen.getAllByRole('row');
+    expect(rows.length).toBeGreaterThanOrEqual(3);
+
+    // Clicking select selects the item
+    fireEvent.click(selectTablet);
+    expect(selectTablet.getAttribute('aria-pressed')).toBe('true');
   });
 });
 

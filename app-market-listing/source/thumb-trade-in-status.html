@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="thumbnail.css">
+<style>
+  .head { display: flex; justify-content: space-between; align-items: center; }
+  .tl { margin-top: 14px; position: relative; padding-inline-start: 18px; }
+  .tl::before { content: ''; position: absolute; left: 5px; top: 4px; bottom: 6px; width: 2px; background: #e5e7eb; }
+  .ev { position: relative; display: flex; align-items: center; gap: 8px; height: 22px; }
+  .ev .dot { position: absolute; left: -18px; width: 12px; height: 12px; border-radius: 50%; background: #fff; border: 2px solid #d1d5db; }
+  .ev.done .dot { background: #0f5f4f; border-color: #0f5f4f; }
+  .ev.now .dot { border-color: #0f5f4f; box-shadow: 0 0 0 3px #d1fae5; }
+  .offer { position: absolute; right: 16px; top: 52px; width: 96px; border-radius: 8px; background: #ecfdf5; border: 1px solid #a7f3d0; padding: 9px; }
+  .offer b { display: block; font-size: 17px; font-weight: 700; color: #0f5f4f; }
+</style>
+</head>
+<body>
+  <div class="glow a"></div><div class="glow b"></div>
+  <div class="card">
+    <div class="head"><h1>Your trade-in</h1><span class="pill amber" style="width:52px"></span></div>
+    <div class="sub" style="width:44%"></div>
+    <div class="tl">
+      <div class="ev done"><span class="dot"></span><div class="line" style="width:74px"></div></div>
+      <div class="ev done"><span class="dot"></span><div class="line" style="width:96px"></div></div>
+      <div class="ev now"><span class="dot"></span><div class="line" style="width:60px;background:#9ca3af"></div></div>
+      <div class="ev"><span class="dot"></span><div class="line" style="width:84px"></div></div>
+    </div>
+    <div class="offer"><div class="line" style="width:60%;background:#a7f3d0"></div><b style="margin-top:6px">$95</b><div class="btn brand" style="height:16px;margin-top:6px"></div></div>
+  </div>
+</body>
+</html>

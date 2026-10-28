@@ -1,0 +1,43 @@
+/* Shared styles for the Add Panel widget thumbnails. Laid out at 300x180 and zoomed 2x, since
+   headless Chrome won't open a window narrow enough to use device scale for this size. */
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=block');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { zoom: 2; }
+html, body {
+  width: 300px;
+  height: 180px;
+  overflow: hidden;
+  background: #0f5f4f;
+  font-family: 'Roboto', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.glow { position: absolute; border-radius: 50%; }
+.glow.a { left: -60px; top: -80px; width: 200px; height: 200px; background: rgba(52, 211, 153, 0.2); }
+.glow.b { right: -50px; bottom: -90px; width: 210px; height: 210px; background: rgba(245, 181, 68, 0.16); }
+
+/* Mini widget card */
+.card {
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  top: 20px;
+  bottom: -14px;
+  background: #fff;
+  border-radius: 10px;
+  padding: 14px 16px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.3);
+}
+.card h1 { font-size: 15px; font-weight: 700; color: #111827; letter-spacing: -0.01em; }
+.card .sub { height: 6px; width: 62%; border-radius: 3px; background: #e5e7eb; margin-top: 7px; }
+
+.line { height: 6px; border-radius: 3px; background: #e5e7eb; }
+.btn { height: 20px; border-radius: 5px; background: #111827; }
+.btn.brand { background: #0f5f4f; }
+.btn.ghost { background: #fff; border: 1px solid #d1d5db; }
+.pill { display: inline-block; height: 11px; border-radius: 6px; }
+.pill.green { background: #bbf7d0; }
+.pill.amber { background: #fde68a; }
+.pill.blue { background: #bfdbfe; }
+.prod { border-radius: 6px; background: linear-gradient(145deg, #eef2f7, #dfe5ee); display: flex; align-items: center; justify-content: center; }

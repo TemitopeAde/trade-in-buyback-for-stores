@@ -13,7 +13,15 @@ function normalizeCatalogResponse(res: CatalogSearchResponse | CatalogItem[]): C
   return res ?? { items: [], hasMore: false };
 }
 
-export function ProductPicker({ selected, onSelect }: { selected?: CatalogItem; onSelect: (item: CatalogItem) => void }) {
+export function ProductPicker({
+  selected,
+  onSelect,
+  layout = 'grid',
+}: {
+  selected?: CatalogItem;
+  onSelect: (item: CatalogItem) => void;
+  layout?: 'grid' | 'table';
+}) {
   const { t, isEditor } = useWidget();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<CatalogItem[]>([]);
@@ -79,8 +87,11 @@ export function ProductPicker({ selected, onSelect }: { selected?: CatalogItem; 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, isEditor]);
 
+  // Grid layout scrolls with the page, so a sentinel below the list triggers the next page. Table
+  // layout scrolls inside its own capped box (handleTableScroll); a sentinel outside that box is
+  // always in view and would page through the whole catalog unprompted.
   useEffect(() => {
-    if (isEditor || !hasMore || loading || loadingMore || !sentinelRef.current) return;
+    if (layout === 'table' || isEditor || !hasMore || loading || loadingMore || !sentinelRef.current) return;
     if (typeof IntersectionObserver === 'undefined') return;
     const observer = new IntersectionObserver(
       (entries) => {
@@ -93,7 +104,7 @@ export function ProductPicker({ selected, onSelect }: { selected?: CatalogItem; 
     observer.observe(sentinelRef.current);
     return () => observer.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasMore, loading, loadingMore, nextCursor, query, isEditor]);
+  }, [layout, hasMore, loading, loadingMore, nextCursor, query, isEditor]);
 
   // When a product is preselected (e.g. from the product page plugin), ensure it is visible in the list
   const displayResults = useMemo(() => {
@@ -103,43 +114,131 @@ export function ProductPicker({ selected, onSelect }: { selected?: CatalogItem; 
     return [selected, ...results];
   }, [results, orderItems, selected, query]);
 
+  const handleTableScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    if (!hasMore || loading || loadingMore) return;
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    if (scrollHeight - scrollTop - clientHeight < 80) {
+      loadMore();
+    }
+  };
+
   const renderProductsList = (items: CatalogItem[], label: string, isCatalog = false) => (
     <div className="ti-fields">
       <p className="ti-label">{label}</p>
-      <ul className="ti-products">
-        {items.map((item) => {
-          const isSelected = selected?.productId === item.productId && selected?.orderId === item.orderId;
-          const imgUrl = toPublicMediaUrl(item.imageUrl);
-          return (
-            <li key={`${item.orderId ?? 'c'}:${item.productId}`}>
-              <button
-                type="button"
-                className="ti-product"
-                aria-pressed={isSelected}
-                aria-label={t('form.item.select', { name: item.title })}
-                onClick={() => onSelect(item)}
-              >
-                {imgUrl ? (
-                  <img
-                    className="ti-product__image"
-                    src={imgUrl}
-                    alt=""
-                    loading="lazy"
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                    }}
-                  />
-                ) : (
-                  <span className="ti-product__image ti-product__image--placeholder" aria-hidden="true" />
-                )}
-                <span className="ti-product__title">{item.title}</span>
-                {isSelected && <span className="ti-badge">{t('form.item.selected')}</span>}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-      {isCatalog && hasMore && <div ref={sentinelRef} className="ti-sentinel" aria-hidden="true" />}
+      {layout === 'table' ? (
+        <div
+          className="ti-table-container"
+          tabIndex={0}
+          role="region"
+          aria-label={label}
+          onScroll={isCatalog ? handleTableScroll : undefined}
+        >
+          <table className="ti-products-table" role="table">
+            <thead>
+              <tr>
+                <th scope="col" className="ti-th--product">{t('common.item')}</th>
+                <th scope="col" className="ti-th--action">{t('common.action')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => {
+                const isSelected = selected?.productId === item.productId && selected?.orderId === item.orderId;
+                const imgUrl = toPublicMediaUrl(item.imageUrl);
+                return (
+                  <tr
+                    key={`${item.orderId ?? 'c'}:${item.productId}`}
+                    className={`ti-tr ${isSelected ? 'ti-tr--selected' : ''}`}
+                    onClick={() => onSelect(item)}
+                  >
+                    <td className="ti-td--product">
+                      <div className="ti-product-cell">
+                        {imgUrl ? (
+                          <img
+                            className="ti-product__image ti-product__image--table"
+                            src={imgUrl}
+                            alt=""
+                            loading="lazy"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <span
+                            className="ti-product__image ti-product__image--table ti-product__image--placeholder"
+                            aria-hidden="true"
+                          />
+                        )}
+                        <div className="ti-product-cell__info">
+                          <span className="ti-product__title">{item.title}</span>
+                          {item.orderId && (
+                            <span className="ti-product__order-tag">{t('form.item.fromOrders')}</span>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="ti-td--action">
+                      <button
+                        type="button"
+                        className={`ti-button ${isSelected ? 'ti-button--primary' : 'ti-button--secondary'} ti-button--sm`}
+                        aria-pressed={isSelected}
+                        aria-label={t('form.item.select', { name: item.title })}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelect(item);
+                        }}
+                      >
+                        {isSelected ? (
+                          <>
+                            <span aria-hidden="true">✓ </span>
+                            {t('form.item.selected')}
+                          </>
+                        ) : (
+                          t('common.select')
+                        )}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <ul className="ti-products">
+          {items.map((item) => {
+            const isSelected = selected?.productId === item.productId && selected?.orderId === item.orderId;
+            const imgUrl = toPublicMediaUrl(item.imageUrl);
+            return (
+              <li key={`${item.orderId ?? 'c'}:${item.productId}`}>
+                <button
+                  type="button"
+                  className="ti-product"
+                  aria-pressed={isSelected}
+                  aria-label={t('form.item.select', { name: item.title })}
+                  onClick={() => onSelect(item)}
+                >
+                  {imgUrl ? (
+                    <img
+                      className="ti-product__image"
+                      src={imgUrl}
+                      alt=""
+                      loading="lazy"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
+                  ) : (
+                    <span className="ti-product__image ti-product__image--placeholder" aria-hidden="true" />
+                  )}
+                  <span className="ti-product__title">{item.title}</span>
+                  {isSelected && <span className="ti-badge">{t('form.item.selected')}</span>}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {isCatalog && hasMore && layout !== 'table' && <div ref={sentinelRef} className="ti-sentinel" aria-hidden="true" />}
       {isCatalog && loadingMore && (
         <div className="ti-loading-more" aria-live="polite">
           <Loading />
@@ -147,7 +246,7 @@ export function ProductPicker({ selected, onSelect }: { selected?: CatalogItem; 
       )}
       {isCatalog && hasMore && !loadingMore && (
         <div className="ti-load-more">
-          <button type="button" className="ti-btn ti-btn--secondary" onClick={loadMore}>
+          <button type="button" className="ti-button ti-button--secondary" onClick={loadMore}>
             {t('form.item.loadMore')}
           </button>
         </div>

@@ -45,7 +45,7 @@ export const PLAN_ENTITLEMENTS: Record<PlanTier, PlanEntitlements> = {
     maxProductsPerRule: 1,
     resaleDrafts: false,
     csvExport: false,
-    advancedStyling: false,
+    advancedStyling: true,
     expeditedRetry: false,
     maxReportDays: 14,
   },

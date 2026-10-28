@@ -1,0 +1,40 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="thumbnail.css">
+<style>
+  .steps { display: flex; gap: 6px; margin-top: 12px; }
+  .steps i { flex: 1; height: 4px; border-radius: 2px; background: #e5e7eb; }
+  .steps i.on { background: #0f5f4f; }
+  .grid { display: grid; grid-template-columns: 1fr 92px; gap: 12px; margin-top: 12px; }
+  .opts { display: flex; gap: 5px; margin-top: 7px; }
+  .opt { height: 17px; flex: 1; border-radius: 5px; border: 1px solid #d1d5db; }
+  .opt.sel { border-color: #0f5f4f; background: #ecfdf5; box-shadow: inset 0 0 0 1px #0f5f4f; }
+  .q + .q { margin-top: 10px; }
+  .est { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; }
+  .est .prod { height: 34px; }
+  .est b { display: block; margin-top: 6px; font-size: 17px; font-weight: 700; color: #0f5f4f; }
+</style>
+</head>
+<body>
+  <div class="glow a"></div><div class="glow b"></div>
+  <div class="card">
+    <h1>Trade in your item</h1>
+    <div class="sub"></div>
+    <div class="steps"><i class="on"></i><i class="on"></i><i></i><i></i></div>
+    <div class="grid">
+      <div>
+        <div class="q"><div class="line" style="width:70%"></div><div class="opts"><div class="opt sel"></div><div class="opt"></div><div class="opt"></div></div></div>
+        <div class="q"><div class="line" style="width:55%"></div><div class="opts"><div class="opt"></div><div class="opt sel"></div><div class="opt"></div></div></div>
+        <div class="btn brand" style="width:64px;margin-top:12px"></div>
+      </div>
+      <div class="est">
+        <div class="prod"><svg width="22" height="22" viewBox="0 0 120 120" fill="none" stroke="#1f2937" stroke-width="10" stroke-linecap="round"><path d="M22 72V60a38 38 0 0 1 76 0v12"/><rect x="12" y="66" width="22" height="34" rx="8" fill="#1f2937"/><rect x="86" y="66" width="22" height="34" rx="8" fill="#1f2937"/></svg></div>
+        <b>$120</b>
+        <div class="line" style="width:80%;margin-top:5px"></div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

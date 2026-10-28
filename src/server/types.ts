@@ -15,6 +15,12 @@ export type ProductSnapshot = {
 export type InternalNote = { id: string; authorId: string; text: string; createdAt: string };
 
 export type GiftCardStatus = 'not_started' | 'pending' | 'issued' | 'failed' | 'reconcile_required';
+/**
+ * Whether Wix's gift card email (the only way the code reaches the customer) went out. 'sending'
+ * is claimed before the send so a retry never sends twice. Unset on credit issued before this
+ * was tracked (those emails were sent), so only 'failed' and 'disabled' mean the code is missing.
+ */
+export type GiftCardEmailStatus = 'sending' | 'sent' | 'failed' | 'disabled';
 export type ResaleDraftStatus = 'not_started' | 'pending' | 'created' | 'failed';
 
 export type TradeInDoc = Doc & {
@@ -52,6 +58,9 @@ export type TradeInDoc = Doc & {
   giftCardStatus: GiftCardStatus;
   giftCardIssuedAt?: Date;
   giftCardIdempotencyKey?: string;
+  giftCardEmailStatus?: GiftCardEmailStatus;
+  /** When the last send attempt finished. */
+  giftCardEmailAt?: Date;
   resaleProductId?: string;
   resaleDraftStatus: ResaleDraftStatus;
   submissionKey: string;

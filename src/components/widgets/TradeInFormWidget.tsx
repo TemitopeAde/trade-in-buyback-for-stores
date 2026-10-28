@@ -6,7 +6,7 @@ import type { CatalogItem, EstimateResponse, FormConfig, SubmitResponse } from '
 import type { ConditionAnswers, HandoffMethod } from '../../lib/schemas/domain';
 import { ApiClientError, errorMessageKey, widgetApi } from './shared/api';
 import { ConditionQuestionGroup } from './shared/ConditionQuestionGroup';
-import { newIdempotencyKey, readQueryParam, useSiteEnv } from './shared/env';
+import { currentMemberEmail, newIdempotencyKey, readQueryParam, useSiteEnv } from './shared/env';
 import { PhotoUploader, UploadChecklist, UploadRejections, VideoUploader } from './shared/Evidence';
 import { HandoffMethodSelector, OfferSummary } from './shared/Offer';
 import { Alert, Loading, TradeInErrorState, WidgetButton, WidgetCard, WidgetField, WidgetHeader } from './shared/primitives';
@@ -16,13 +16,28 @@ import { useUploads } from './shared/useUploads';
 import { useWidget, WidgetThemeProvider } from './shared/WidgetThemeProvider';
 import { TradeInStatusView } from './TradeInStatusWidget';
 
-export type TradeInFormWidgetProps = { styleConfig?: string | null };
+export type TradeInFormWidgetProps = {
+  styleConfig?: string | null;
+  catalogLayout?: 'grid' | 'table';
+  embedded?: boolean;
+  designMode?: boolean;
+};
 
-export function TradeInFormWidget({ styleConfig }: TradeInFormWidgetProps) {
+// `embedded`: rendered inside an Editor React component, which owns the title, description and
+// region landmark. `designMode`: the host knows it is in Editor design mode, so show the preview.
+export function TradeInFormWidget({ styleConfig, catalogLayout, embedded, designMode }: TradeInFormWidgetProps) {
   const env = useSiteEnv();
+  const isEditor = !!designMode || env.isEditor;
   return (
-    <WidgetThemeProvider styleConfig={styleConfig} locale={env.locale} isEditor={env.isEditor} labelledBy="ti-form-title">
-      {!env.ready ? null : env.isEditor ? <FormEditorPreview /> : <FormFlow />}
+    <WidgetThemeProvider
+      styleConfig={styleConfig}
+      locale={env.locale}
+      isEditor={isEditor}
+      as={embedded ? 'div' : 'section'}
+      hostHeader={embedded}
+      labelledBy={embedded ? undefined : 'ti-form-title'}
+    >
+      {!env.ready && !designMode ? null : isEditor ? <FormEditorPreview /> : <FormFlow catalogLayout={catalogLayout} />}
     </WidgetThemeProvider>
   );
 }
@@ -47,6 +62,7 @@ type Action =
   | { type: 'answer'; questionId: string; optionId: string }
   | { type: 'handoff'; value: HandoffMethod }
   | { type: 'contact'; field: keyof Contact; value: string }
+  | { type: 'prefill_email'; email: string }
   | { type: 'terms'; value: boolean }
   | { type: 'step'; step: number }
   | { type: 'reset' };
@@ -69,6 +85,8 @@ function reducer(state: State, action: Action): State {
       return { ...state, answers: { ...state.answers, [action.questionId]: action.optionId } };
     case 'handoff':
       return { ...state, handoff: action.value };
+    case 'prefill_email':
+      return state.contact.email ? state : { ...state, contact: { ...state.contact, email: action.email } };
     case 'contact':
       return { ...state, contact: { ...state.contact, [action.field]: action.value } };
     case 'terms':
@@ -86,7 +104,17 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // ---- Flow --------------------------------------------------------------------------
 
-export function FormFlow({ initialProductId, onClose }: { initialProductId?: string; onClose?: () => void } = {}) {
+export function FormFlow({
+  initialProductId,
+  onClose,
+  isModal = false,
+  catalogLayout,
+}: {
+  initialProductId?: string;
+  onClose?: () => void;
+  isModal?: boolean;
+  catalogLayout?: 'grid' | 'table';
+} = {}) {
   const { t, style, locale } = useWidget();
   const [state, dispatch] = useReducer(reducer, initial);
   const [issues, setIssues] = useState<Issue[]>([]);
@@ -109,6 +137,17 @@ export function FormFlow({ initialProductId, onClose }: { initialProductId?: str
     const pid = initialProductId || readQueryParam('product');
     if (pid && /^[A-Za-z0-9-]{1,64}$/.test(pid)) dispatch({ type: 'select', item: { productId: pid, title: '', source: 'catalog' } });
   }, [initialProductId]);
+
+  // Prefill the email for signed-in members; anything the visitor already typed wins.
+  useEffect(() => {
+    let alive = true;
+    currentMemberEmail().then((email) => {
+      if (alive && email) dispatch({ type: 'prefill_email', email });
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const productId = state.item?.productId;
   const loadConfig = () => {
@@ -184,6 +223,8 @@ export function FormFlow({ initialProductId, onClose }: { initialProductId?: str
 
   const showIssues = (found: Issue[]) => {
     setIssues(found);
+    // The visible summary takes focus (scrolling it into view, also inside the drawer) and is
+    // announced once; it stays until the issues are fixed.
     if (found.length) requestAnimationFrame(() => summaryRef.current?.focus());
   };
 
@@ -252,7 +293,11 @@ export function FormFlow({ initialProductId, onClose }: { initialProductId?: str
 
           {state.step === 0 && (
             <>
-              <ProductPicker selected={state.item} onSelect={(item) => dispatch({ type: 'select', item })} />
+              <ProductPicker
+                selected={state.item}
+                onSelect={(item) => dispatch({ type: 'select', item })}
+                layout={catalogLayout ?? (isModal ? 'table' : 'grid')}
+              />
               {state.configLoading && <Loading />}
               {configError && <TradeInErrorState message={configError} onRetry={loadConfig} />}
               {config && !config.eligible && <Alert tone="info">{t('form.item.notEligible')}</Alert>}

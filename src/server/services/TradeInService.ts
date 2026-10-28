@@ -350,6 +350,7 @@ export function toCustomerView(doc: TradeInDoc, events: TradeInEventDoc[], setti
         ? { amountMinor: doc.revisedValueMinor, reason: doc.revisedOfferReason, expiresAt: doc.revisedOfferExpiresAt ? toIso(doc.revisedOfferExpiresAt) : undefined }
         : undefined,
     rejectionReason: doc.status === 'rejected' || doc.status === 'return_pending' ? doc.rejectionReason : undefined,
+    giftCardCodePending: doc.giftCardStatus === 'issued' && (doc.giftCardEmailStatus === 'failed' || doc.giftCardEmailStatus === 'disabled'),
     handoff: {
       method,
       address: showHandoff ? config.address || undefined : undefined,

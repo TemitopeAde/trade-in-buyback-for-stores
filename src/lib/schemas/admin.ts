@@ -106,6 +106,7 @@ export type AdminTradeInDetail = AdminTradeInRow & {
   returnStatus?: string;
   giftCardId?: string;
   giftCardIssuedAt?: string;
+  giftCardEmailStatus?: 'sending' | 'sent' | 'failed' | 'disabled';
   resaleProductId?: string;
   resaleDraftStatus: string;
   notes: { id: string; text: string; createdAt: string }[];
@@ -141,5 +142,7 @@ export type SetupChecklist = {
   statusPageConfigured: boolean;
   pluginPlaced?: boolean;
   giftCardsAvailable?: boolean;
+  /** False when the most recent Wix gift card email failed; omitted until one was attempted. */
+  giftCardEmailWorking?: boolean;
   emailConfigured?: boolean;
 };

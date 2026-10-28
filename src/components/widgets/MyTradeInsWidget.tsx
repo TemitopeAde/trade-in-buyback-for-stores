@@ -7,18 +7,28 @@ import { useSiteEnv } from './shared/env';
 import { Alert, Loading, TradeInEmptyState, TradeInErrorState, WidgetButton, WidgetHeader } from './shared/primitives';
 import { useWidget, WidgetThemeProvider } from './shared/WidgetThemeProvider';
 
-export type MyTradeInsWidgetProps = { styleConfig?: string | null };
+export type MyTradeInsWidgetProps = { styleConfig?: string | null; embedded?: boolean; designMode?: boolean };
 
 // Lists the signed-in member's trade-ins. Membership is resolved on the server from the
 // verified session; the widget never sends a member ID.
-export function MyTradeInsWidget({ styleConfig }: MyTradeInsWidgetProps) {
+// `embedded`: rendered inside an Editor React component, which owns the title, description and
+// region landmark. `designMode`: the host knows it is in Editor design mode, so show the preview.
+export function MyTradeInsWidget({ styleConfig, embedded, designMode }: MyTradeInsWidgetProps) {
   const env = useSiteEnv();
+  const isEditor = !!designMode || env.isEditor;
   return (
-    <WidgetThemeProvider styleConfig={styleConfig} locale={env.locale} isEditor={env.isEditor} labelledBy="ti-mine-title">
-      {!env.ready ? null : (
+    <WidgetThemeProvider
+      styleConfig={styleConfig}
+      locale={env.locale}
+      isEditor={isEditor}
+      as={embedded ? 'div' : 'section'}
+      hostHeader={embedded}
+      labelledBy={embedded ? undefined : 'ti-mine-title'}
+    >
+      {!env.ready && !designMode ? null : (
         <div className="ti-stack">
           <MineHeader />
-          {env.isEditor ? <MinePreview /> : <MineList />}
+          {isEditor ? <MinePreview /> : <MineList />}
         </div>
       )}
     </WidgetThemeProvider>
