@@ -333,8 +333,6 @@ export const ja: Catalog = {
   'dash.settings.allowCancel': '発送前ならお客様自身でキャンセルできるようにする',
   'dash.settings.allowTracking': 'お客様による追跡番号の登録を許可する',
   'dash.settings.credit': 'ストアクレジット',
-  'dash.settings.currency': '通貨コード',
-  'dash.settings.currencyHelp': '大文字3文字の通貨コード（例: JPY, USD, EUR）。',
   'dash.settings.dropOff': '店頭持ち込み',
   'dash.settings.expiry': 'ギフトカードの有効期限（ヶ月）',
   'dash.settings.expiryHelp': '無期限にする場合は空欄にしてください。',

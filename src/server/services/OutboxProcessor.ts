@@ -17,6 +17,7 @@ const CUSTOMER_ON_ENTER: Partial<Record<TradeInStatus, CustomerNotificationEvent
   approved: 'approved',
   rejected: 'rejected',
   received: 'received',
+  quote_pending: 'quote',
   revised_offer_pending: 'revised_offer',
   revised_offer_accepted: 'revised_offer_decision',
   revised_offer_declined: 'revised_offer_decision',
@@ -34,6 +35,8 @@ type Change = { action?: TradeInAction; actorType?: ActorType; from: TradeInStat
 
 // Statuses whose email depends on how they were reached.
 function customerEventFor(c: Change): CustomerNotificationEvent | undefined {
+  // Accepting a quote approves the item and declining cancels it; the decision email covers both.
+  if (c.action === 'accept_quote' || c.action === 'decline_quote') return 'quote_decision';
   // Declining a revised offer also enters return_pending; its decision email already covers the return.
   if (c.to === 'return_pending') return c.action === 'reject_after_inspection' ? 'return_started' : undefined;
   // Closing after credit was issued or a rejection needs no email; closing a return confirms it.
@@ -42,6 +45,8 @@ function customerEventFor(c: Change): CustomerNotificationEvent | undefined {
 }
 
 function merchantEventFor(c: Change): MerchantNotificationEvent | undefined {
+  if (c.action === 'accept_quote') return 'quote_accepted';
+  if (c.action === 'decline_quote') return 'quote_declined';
   // Staff who mark an item in transit themselves don't need to hear about it.
   if (c.to === 'in_transit') return c.actorType === 'customer' ? 'shipped' : undefined;
   return MERCHANT_ON_ENTER[c.to];

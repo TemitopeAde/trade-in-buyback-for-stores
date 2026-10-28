@@ -333,8 +333,6 @@ export const ko: Catalog = {
   'dash.settings.allowCancel': '발송 전 고객이 직접 취소할 수 있도록 허용',
   'dash.settings.allowTracking': '고객이 운송장 번호를 등록할 수 있도록 허용',
   'dash.settings.credit': '스토어 크레딧',
-  'dash.settings.currency': '통화 코드',
-  'dash.settings.currencyHelp': '대문자 3자리 코드 (예: KRW, USD, EUR).',
   'dash.settings.dropOff': '매장 방문 전달',
   'dash.settings.expiry': '기프트카드 유효기간 (개월)',
   'dash.settings.expiryHelp': '만료되지 않게 하려면 비워두세요.',

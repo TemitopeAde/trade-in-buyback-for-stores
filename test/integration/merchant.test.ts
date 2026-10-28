@@ -17,14 +17,18 @@ const merchantActor = { type: 'merchant' as const, id: 'u1' };
 let n = 0;
 const key = () => `idem-key-${String(++n).padStart(8, '0')}`;
 
-function setup(planTier?: PlanTier) {
+const deletedFiles: string[] = [];
+
+function setup(planTier?: PlanTier, now?: Date) {
   const repo = new MemoryRepo();
   const plan = planTier ? { entitlements: async () => getPlanEntitlements(planTier) } : undefined;
   const idempotency = new IdempotencyService(repo);
   const lifecycle = new TradeInLifecycleService(repo, idempotency, new OutboxService(repo));
   const svc = new MerchantService({
-    repo, lifecycle, media: new TradeInMediaService(repo, { viewUrl: async () => 'https://signed' } as unknown as WixMediaService),
+    repo, lifecycle,
+    media: new TradeInMediaService(repo, { viewUrl: async () => 'https://signed', deletePermanently: async (ids: string[]) => { deletedFiles.push(...ids); } } as unknown as WixMediaService),
     rules: new RulesService(repo), settings: new SettingsService(repo), catalogVersion: async () => 'V3_CATALOG', plan,
+    now: now && (() => now),
   });
   return { repo, svc };
 }
@@ -96,7 +100,73 @@ describe('MerchantService', () => {
     const o = await s.svc.overview(I);
     expect(o.counts.needs_review).toBe(1);
     expect(o.counts.awaiting_handoff).toBe(1);
-    expect(o.setup).toMatchObject({ storesInstalled: true, hasRules: false, settingsSaved: false });
+    expect(o.setup).toMatchObject({ storesInstalled: true, hasRules: false, settingsSaved: false, termsConfigured: false });
+  });
+});
+
+describe('MerchantService request deletion', () => {
+  // The in-memory repo stamps documents in January 2026.
+  const JAN = new Date(Date.UTC(2026, 0, 15));
+  let s: ReturnType<typeof setup>;
+  beforeEach(() => { s = setup(undefined, JAN); deletedFiles.length = 0; });
+
+  const rows = (collection: string, tradeInId: string) => [...s.repo.data.get(collection)?.values() ?? []].filter((d) => d.tradeInId === tradeInId);
+
+  it('deletes the request with its media files, timeline, email log, jobs and access links', async () => {
+    const doc = await seed(s.repo);
+    const other = await seed(s.repo);
+    await s.svc.addNote(I, merchantActor, doc._id, 'Called customer');
+    for (const [collection, extra] of [
+      [COLLECTIONS.media, { mediaManagerFileId: 'file-1' }],
+      [COLLECTIONS.notifications, {}],
+      [COLLECTIONS.outbox, {}],
+      [COLLECTIONS.accessTokens, {}],
+    ] as const) {
+      // Distinct values for the collections' unique keys (dedupeKey, eventId, tokenHash).
+      const unique = (id: string) => ({ dedupeKey: id, eventId: id, recipientType: 'customer', tokenHash: id });
+      await s.repo.insert(collection, { instanceId: I, tradeInId: doc._id, ...unique(`${collection}-a`), ...extra });
+      await s.repo.insert(collection, { instanceId: I, tradeInId: other._id, ...unique(`${collection}-b`) });
+    }
+
+    await s.svc.deleteTradeIn(I, merchantActor, doc._id);
+
+    expect(await s.repo.get(COLLECTIONS.tradeIns, doc._id)).toBeNull();
+    expect(deletedFiles).toEqual(['file-1']);
+    for (const c of [COLLECTIONS.media, COLLECTIONS.notifications, COLLECTIONS.outbox, COLLECTIONS.accessTokens]) {
+      expect(rows(c, doc._id)).toEqual([]);
+      expect(rows(c, other._id)).toHaveLength(1);
+    }
+    // Only the anonymous tombstone remains on the timeline.
+    expect(rows(COLLECTIONS.events, doc._id)).toEqual([expect.objectContaining({ eventType: 'trade_in.deleted', actorType: 'merchant', actorId: 'u1' })]);
+    expect(JSON.stringify(rows(COLLECTIONS.events, doc._id))).not.toContain('Ana');
+    expect(await s.repo.get(COLLECTIONS.tradeIns, other._id)).not.toBeNull();
+  });
+
+  it('can be retried after an interrupted attempt', async () => {
+    const doc = await seed(s.repo);
+    await s.repo.insert(COLLECTIONS.events, { _id: `deleted-${doc._id}`, instanceId: I, tradeInId: doc._id, eventType: 'trade_in.deleted', actorType: 'merchant' });
+    await s.svc.deleteTradeIn(I, merchantActor, doc._id);
+    expect(await s.repo.get(COLLECTIONS.tradeIns, doc._id)).toBeNull();
+    expect(rows(COLLECTIONS.events, doc._id)).toHaveLength(1);
+  });
+
+  it('leaves no tombstone for requests from an earlier month', async () => {
+    s = setup(undefined, new Date(Date.UTC(2026, 1, 3)));
+    const doc = await seed(s.repo);
+    await s.svc.deleteTradeIn(I, merchantActor, doc._id);
+    expect(rows(COLLECTIONS.events, doc._id)).toEqual([]);
+  });
+
+  it('refuses while store credit is being issued', async () => {
+    const doc = await seed(s.repo, { status: 'credit_pending' });
+    await expect(s.svc.deleteTradeIn(I, merchantActor, doc._id)).rejects.toMatchObject({ code: 'conflict', fields: { status: 'credit_pending' } });
+    expect(await s.repo.get(COLLECTIONS.tradeIns, doc._id)).not.toBeNull();
+  });
+
+  it('only deletes requests that belong to the caller\'s site', async () => {
+    const doc = await seed(s.repo);
+    await expect(s.svc.deleteTradeIn('other-instance', merchantActor, doc._id)).rejects.toMatchObject({ code: 'not_found' });
+    expect(await s.repo.get(COLLECTIONS.tradeIns, doc._id)).not.toBeNull();
   });
 });
 

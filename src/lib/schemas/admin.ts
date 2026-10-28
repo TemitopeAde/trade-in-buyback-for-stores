@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRADE_IN_STATUSES, type ActorType, type TradeInAction, type TradeInStatus } from '../lifecycle';
-import type { HandoffMethod, OfferBreakdown } from './domain';
+import type { CustomItem, HandoffMethod, OfferBreakdown } from './domain';
 
 // Merchant dashboard contracts (requests validated on the server; DTOs typed for the UI).
 
@@ -28,13 +28,13 @@ export const STATUS_GROUPS: Record<NonNullable<AdminListRequest['statusGroup']>,
   needs_review: ['submitted', 'under_review'],
   awaiting_handoff: ['approved', 'in_transit'],
   in_inspection: ['received', 'inspection'],
-  awaiting_customer: ['revised_offer_pending'],
+  awaiting_customer: ['quote_pending', 'revised_offer_pending'],
   credit: ['credit_pending', 'credit_issued', 'revised_offer_accepted'],
   closed: ['closed', 'cancelled', 'rejected', 'return_pending', 'revised_offer_declined'],
 };
 
 export const MERCHANT_ACTIONS = [
-  'start_review', 'approve', 'reject', 'cancel', 'mark_in_transit', 'receive', 'start_inspection', 'confirm_value',
+  'start_review', 'send_quote', 'accept_quote', 'decline_quote', 'approve', 'reject', 'cancel', 'mark_in_transit', 'receive', 'start_inspection', 'confirm_value',
   'send_revised_offer', 'reject_after_inspection', 'accept_revised_offer', 'decline_revised_offer', 'mark_returned', 'close',
 ] as const satisfies readonly TradeInAction[];
 export type MerchantAction = (typeof MERCHANT_ACTIONS)[number];
@@ -47,6 +47,7 @@ export const adminActionRequest = z.object({
   reason: plain(1000).optional(),
   inspectionNotes: plain(2000).optional(),
   revisedValueMinor: z.int().min(1).max(100_000_000_00).optional(),
+  quotedValueMinor: z.int().min(1).max(100_000_000_00).optional(),
   trackingNumber: plain(80).optional(),
 });
 export type AdminActionRequest = z.infer<typeof adminActionRequest>;
@@ -65,6 +66,8 @@ export type AdminTradeInRow = {
   customerName: string;
   customerEmail: string;
   productTitle: string;
+  /** Customer-described item outside the catalog; its value is quoted by staff. */
+  custom: boolean;
   categoryId?: string;
   estimatedValueMinor: number;
   finalValueMinor?: number;
@@ -94,8 +97,11 @@ export type AdminTradeInDetail = AdminTradeInRow & {
   orderId?: string;
   productId: string;
   productImageUrl?: string;
+  customItem?: CustomItem;
   conditionAnswers: { questionId: string; optionId: string; question: string; answer: string }[];
-  offerBreakdown: OfferBreakdown;
+  offerBreakdown?: OfferBreakdown;
+  quotedValueMinor?: number;
+  quoteExpiresAt?: string;
   revisedValueMinor?: number;
   revisedOfferReason?: string;
   revisedOfferExpiresAt?: string;
@@ -109,6 +115,9 @@ export type AdminTradeInDetail = AdminTradeInRow & {
   giftCardEmailStatus?: 'sending' | 'sent' | 'failed' | 'disabled';
   resaleProductId?: string;
   resaleDraftStatus: string;
+  /** Sanitized terms the customer accepted at submission. */
+  termsHtml?: string;
+  termsAcceptedAt?: string;
   notes: { id: string; text: string; createdAt: string }[];
   media: { mediaId: string; kind: 'photo' | 'video'; status: string; url?: string }[];
   timeline: AdminTimelineEntry[];
@@ -140,6 +149,8 @@ export type SetupChecklist = {
   catalogVersion: string;
   hasRules: boolean;
   settingsSaved: boolean;
+  /** The store has trade-in terms; customers can't submit until it does. */
+  termsConfigured: boolean;
   formPageConfigured: boolean;
   statusPageConfigured: boolean;
   pluginPlaced?: boolean;

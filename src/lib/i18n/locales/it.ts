@@ -333,8 +333,6 @@ export const it: Catalog = {
   'dash.settings.allowCancel': 'Consenti al cliente di annullare prima della spedizione',
   'dash.settings.allowTracking': 'Consenti al cliente di inserire il numero di tracciamento',
   'dash.settings.credit': 'Credito negozio',
-  'dash.settings.currency': 'Codice valuta',
-  'dash.settings.currencyHelp': 'Codice di 3 lettere maiuscole (es. EUR, USD).',
   'dash.settings.dropOff': 'Consegna in negozio fisico',
   'dash.settings.expiry': 'Scadenza del buono regalo (mesi)',
   'dash.settings.expiryHelp': 'Lascia vuoto per nessuna scadenza.',

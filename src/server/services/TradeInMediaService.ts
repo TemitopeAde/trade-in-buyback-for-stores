@@ -194,6 +194,13 @@ export class TradeInMediaService {
     return due.length;
   }
 
+  /** Permanently deletes a request's evidence files and their records (request deletion). */
+  async removeForTradeIn(instanceId: string, tradeInId: string): Promise<void> {
+    const docs = await this.forTradeIn(instanceId, tradeInId);
+    await this.wixMedia.deletePermanently(docs.filter((d) => !d.deletedAt).map((d) => d.mediaManagerFileId).filter((x): x is string => !!x));
+    await this.repo.bulkRemove(COLLECTIONS.media, docs.map((d) => d._id));
+  }
+
   private async loadOwned(instanceId: string, uploadSessionId: string, mediaId: string): Promise<TradeInMediaDoc> {
     const media = await this.repo.get<TradeInMediaDoc>(COLLECTIONS.media, mediaId);
     if (!media || media.instanceId !== instanceId || media.uploadSessionId !== uploadSessionId) throw new AppError('not_found');

@@ -333,8 +333,6 @@ export const fil: Catalog = {
   'dash.settings.allowCancel': 'Payagan ang kostumer na magkansela bago maipadala ang aytem',
   'dash.settings.allowTracking': 'Payagan ang kostumer na maglagay ng tracking number',
   'dash.settings.credit': 'Store credit',
-  'dash.settings.currency': 'Simbolo o code ng pera',
-  'dash.settings.currencyHelp': 'Tatlong malalaking titik na currency code (hal. PHP, USD, EUR).',
   'dash.settings.dropOff': 'Personal na pagpasa sa tindahan',
   'dash.settings.expiry': 'Pagtatapos ng bisa ng gift card (buwan)',
   'dash.settings.expiryHelp': 'Iwanang blangko kung walang katapusan ang bisa.',

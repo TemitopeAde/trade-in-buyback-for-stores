@@ -15,6 +15,9 @@ vi.mock('@wix/essentials', () => ({ httpClient: { fetchWithAuth: (...a: unknown[
 const currentMember = vi.fn(async () => ({ member: undefined as { loginEmail?: string } | undefined }));
 vi.mock('@wix/members', () => ({ members: { getCurrentMember: () => currentMember() } }));
 vi.mock('tus-js-client', () => ({ Upload: class {} }));
+// A plain stub (Vitest reports a vi.fn's rejection even when the widget handles it).
+let siteCurrency: () => Promise<string> = async () => 'EUR';
+vi.mock('@wix/site-site', () => ({ site: { currency: () => siteCurrency() } }));
 
 const { TradeInFormWidget } = await import('../../src/components/widgets/TradeInFormWidget');
 const { TradeInStatusWidget } = await import('../../src/components/widgets/TradeInStatusWidget');
@@ -82,6 +85,21 @@ describe('TradeInFormWidget', () => {
     expect(fetchWithAuth).not.toHaveBeenCalled();
   });
 
+  it('shows Editor sample amounts in the site currency, or none when it is unknown', async () => {
+    viewMode.mockResolvedValue('Editor');
+    const { unmount } = render(<TradeInFormWidget />);
+    expect(await screen.findByText('€120.00')).toBeTruthy();
+    unmount();
+    siteCurrency = async () => { throw new Error('no host'); };
+    try {
+      render(<TradeInFormWidget />);
+      await screen.findByText('Live trade-in data appears on your published site.');
+      expect(screen.queryByText(/120\.00/)).toBeNull();
+    } finally {
+      siteCurrency = async () => 'EUR';
+    }
+  });
+
   it('never lets appearance settings hide the terms checkbox', async () => {
     const hidden = { ...themeDefaults(), content: { ...themeDefaults().content, showHelperText: false, showOptionalFields: false, showOfferEstimate: false } };
     history.replaceState(null, '', '/?product=p1');
@@ -91,7 +109,7 @@ describe('TradeInFormWidget', () => {
       '/api/trade-ins/form-config': {
         eligible: true, product: { productId: 'p1', title: 'Phone' }, questions: [],
         media: { photoMinimum: 0, videoMode: 'off', videoMaxSeconds: 60 },
-        handoffMethods: [{ method: 'drop_off' }], termsText: 'Terms apply', currency: 'USD',
+        handoffMethods: [{ method: 'drop_off' }], termsHtml: '<p>Terms apply</p>', currency: 'USD',
       },
       '/api/trade-ins/estimate': { eligible: true, offerMinor: 5000, currency: 'USD', complete: true },
     });
@@ -102,6 +120,26 @@ describe('TradeInFormWidget', () => {
     expect(screen.queryByLabelText(/Phone/)).toBeNull();
   });
 
+  it('shows the store terms as formatted HTML', async () => {
+    history.replaceState(null, '', '/?product=p1');
+    respond({
+      '/api/catalog/order-items': [],
+      '/api/catalog/search': [],
+      '/api/trade-ins/form-config': {
+        eligible: true, accepting: true, product: { productId: 'p1', title: 'Phone' }, questions: [],
+        media: { photoMinimum: 0, videoMode: 'off', videoMaxSeconds: 60 },
+        handoffMethods: [{ method: 'drop_off' }], termsHtml: '<h2>Our terms</h2><ul><li>Credit is final</li></ul>', currency: 'USD',
+      },
+      '/api/trade-ins/estimate': { eligible: true, offerMinor: 5000, currency: 'USD', complete: true },
+    });
+    render(<TradeInFormWidget />);
+    await screen.findAllByText('Phone');
+    for (let i = 0; i < 3; i++) await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Continue' })));
+    await screen.findByRole('checkbox', { name: /I accept the trade-in terms/ });
+    expect(screen.getByRole('heading', { name: 'Our terms', hidden: true })).toBeTruthy();
+    expect(screen.getByText('Credit is final').tagName).toBe('LI');
+  });
+
   it('skips the photo step when uploads are not on the store plan', async () => {
     history.replaceState(null, '', '/?product=p1');
     respond({
@@ -110,7 +148,7 @@ describe('TradeInFormWidget', () => {
       '/api/trade-ins/form-config': {
         eligible: true, accepting: true, uploads: false, product: { productId: 'p1', title: 'Phone' }, questions: [],
         media: { photoMinimum: 0, videoMode: 'off', videoMaxSeconds: 0 },
-        handoffMethods: [{ method: 'drop_off' }], termsText: 'Terms apply', currency: 'USD',
+        handoffMethods: [{ method: 'drop_off' }], termsHtml: '<p>Terms apply</p>', currency: 'USD',
       },
       '/api/trade-ins/estimate': { eligible: true, offerMinor: 5000, currency: 'USD', complete: true },
     });
@@ -121,6 +159,64 @@ describe('TradeInFormWidget', () => {
     expect(screen.getAllByRole('listitem').length).toBe(3);
   });
 
+  it('lets shoppers describe an item that is not in the catalog and submits it without an estimate', async () => {
+    respond({
+      '/api/catalog/order-items': [],
+      '/api/catalog/search': [],
+      '/api/trade-ins/custom-item-config': {
+        eligible: true, accepting: true, uploads: false, custom: true, questions: [],
+        media: { photoMinimum: 0, videoMode: 'off', videoMaxSeconds: 0 },
+        handoffMethods: [{ method: 'drop_off' }], termsHtml: '', currency: 'USD',
+      },
+      '/api/trade-ins/create': { tradeInId: 't1', reference: 'TI-CUST-0001', accessToken: 'a'.repeat(32) },
+      '/api/trade-ins/status': {
+        tradeInId: 't1', reference: 'TI-CUST-0001', status: 'submitted', revision: 1, createdAt: '2026-01-01T00:00:00Z',
+        product: { title: 'Velo Road bike' }, custom: true, currency: 'USD', estimatedValueMinor: 0,
+        handoff: { method: 'drop_off', allowTracking: false }, actions: [], timeline: [],
+      },
+    });
+    render(<TradeInFormWidget />);
+    // Let the catalog search debounce and the custom item config request settle.
+    await act(async () => { await new Promise((r) => setTimeout(r, 400)); });
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Describe it instead' })));
+
+    // Required description fields are checked before moving on.
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Continue' })));
+    expect(screen.getByText('Item name is required.', { selector: 'li' })).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText(/Item name/), { target: { value: 'Road bike' } });
+    fireEvent.change(screen.getByLabelText(/Brand/), { target: { value: 'Velo' } });
+    fireEvent.change(screen.getByLabelText(/Description and condition/), { target: { value: 'Two years old.' } });
+    fireEvent.change(screen.getByLabelText(/What do you think it’s worth/), { target: { value: '300' } });
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Continue' })));
+
+    // No condition questions and (without uploads) no photo step: straight to the details.
+    expect(screen.getAllByRole('listitem').length).toBe(2);
+    expect(screen.getByText('We’ll email you an offer after reviewing your item. Nothing is final until you accept it.')).toBeTruthy();
+    expect(screen.getByText('Velo Road bike')).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText(/Full name/), { target: { value: 'Ana' } });
+    fireEvent.change(screen.getByLabelText(/Email/), { target: { value: 'ana@example.com' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: /I accept the trade-in terms/ }));
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Submit trade-in' })));
+
+    const call = fetchWithAuth.mock.calls.find(([url]) => String(url).includes('/api/trade-ins/create'))!;
+    const body = JSON.parse((call[1] as { body: string }).body);
+    expect(body.productId).toBeUndefined();
+    expect(body.customItem).toEqual({ name: 'Road bike', brand: 'Velo', description: 'Two years old.', customerEstimateMinor: 300_00 });
+  });
+
+  it('hides the custom item option when the store does not accept them', async () => {
+    respond({
+      '/api/catalog/order-items': [],
+      '/api/catalog/search': [],
+      '/api/trade-ins/custom-item-config': { eligible: false, accepting: true, uploads: true, custom: true, questions: [], media: { photoMinimum: 0, videoMode: 'off', videoMaxSeconds: 0 }, handoffMethods: [], termsHtml: '' },
+    });
+    render(<TradeInFormWidget />);
+    await waitFor(() => expect(fetchWithAuth.mock.calls.some(([url]) => String(url).includes('custom-item-config'))).toBe(true));
+    expect(screen.queryByRole('button', { name: 'Describe it instead' })).toBeNull();
+  });
+
   it('tells shoppers when the store is not accepting new trade-ins', async () => {
     history.replaceState(null, '', '/?product=p1');
     respond({
@@ -128,7 +224,7 @@ describe('TradeInFormWidget', () => {
       '/api/catalog/search': [],
       '/api/trade-ins/form-config': {
         eligible: true, accepting: false, uploads: false, product: { productId: 'p1', title: 'Phone' }, questions: [],
-        media: { photoMinimum: 0, videoMode: 'off', videoMaxSeconds: 0 }, handoffMethods: [{ method: 'drop_off' }], termsText: '',
+        media: { photoMinimum: 0, videoMode: 'off', videoMaxSeconds: 0 }, handoffMethods: [{ method: 'drop_off' }], termsHtml: '',
       },
     });
     render(<TradeInFormWidget />);
@@ -164,8 +260,9 @@ describe('TradeInFormWidget', () => {
     const loadMoreBtn = await screen.findByRole('button', { name: 'Load more products' });
     expect(loadMoreBtn).toBeTruthy();
 
-    // Verify smaller image element exists within the product button
-    const img = screen.getByRole('button', { name: 'Select Product One' }).querySelector('.ti-product__image');
+    // The catalog renders as a table on the page too, with the image in the product's row
+    expect(screen.getByRole('table').classList.contains('ti-products-table')).toBe(true);
+    const img = screen.getByRole('button', { name: 'Select Product One' }).closest('tr')?.querySelector('.ti-product__image');
     expect(img).toBeTruthy();
 
     // Clicking load more fetches the next page using cursor
@@ -209,6 +306,26 @@ describe('TradeInStatusWidget', () => {
     expect(screen.getByText('History')).toBeTruthy();
   });
 
+  it('shows the store’s offer for a custom item and accepts it', async () => {
+    history.replaceState(null, '', '/status?ti=abcdefghijklmnopqrstuvwxyz012345');
+    const base = {
+      tradeInId: 't1', reference: 'TI-CUST-0001', revision: 3, createdAt: '2026-01-01T00:00:00Z',
+      product: { title: 'Velo Road bike' }, custom: true, currency: 'USD',
+      handoff: { method: 'drop_off', allowTracking: false }, timeline: [],
+    };
+    respond({
+      '/api/trade-ins/status': { ...base, status: 'quote_pending', estimatedValueMinor: 0, quote: { amountMinor: 250_00 }, actions: ['accept_quote', 'decline_quote'] },
+      '/api/trade-ins/customer-action': { ...base, status: 'approved', revision: 4, estimatedValueMinor: 250_00, actions: [] },
+    });
+    render(<TradeInStatusWidget />);
+    expect(await screen.findByText('Our offer')).toBeTruthy();
+    expect(screen.getByText('Awaiting our offer')).toBeTruthy();
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Accept $250.00' })));
+    const call = fetchWithAuth.mock.calls.find(([url]) => String(url).includes('customer-action'))!;
+    expect(JSON.parse((call[1] as { body: string }).body)).toMatchObject({ action: 'accept_quote', expectedRevision: 3 });
+    expect(await screen.findByText('Approved')).toBeTruthy();
+  });
+
   it('shows a lookup hint to visitors opening it without a link', async () => {
     respond({ '/api/trade-ins/mine': { items: [], signedIn: false } });
     render(<TradeInStatusWidget />);
@@ -245,6 +362,17 @@ describe('TradeInProductButtonWidget', () => {
     const { container } = render(<TradeInProductButtonWidget productId="p1" />);
     await waitFor(() => expect(fetchWithAuth).toHaveBeenCalled());
     expect(container.querySelector('.ti-button')).toBeNull();
+  });
+
+  it('shows a disabled button and a note when the store is not accepting requests', async () => {
+    respond({ '/api/catalog/product-cta': { eligible: false, accepting: false } });
+    render(<TradeInProductButtonWidget productId="p1" />);
+    const button = (await screen.findByRole('button', { name: 'Trade in' })) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute('aria-describedby')).toBeTruthy();
+    expect(document.getElementById(button.getAttribute('aria-describedby')!)?.textContent).toBe('Trade-ins are paused right now. Please check back soon.');
+    fireEvent.click(button);
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('shows a preloader until data is ready', async () => {
@@ -393,7 +521,7 @@ describe('TradeInProductButtonWidget', () => {
         questions: [],
         media: { photoMinimum: 0, videoMode: 'off', videoMaxSeconds: 60 },
         handoffMethods: [{ method: 'drop_off' }],
-        termsText: 'Terms apply',
+        termsHtml: '<p>Terms apply</p>',
         currency: 'USD',
       },
     });

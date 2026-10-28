@@ -333,8 +333,6 @@ export const ru: Catalog = {
   'dash.settings.allowCancel': 'Разрешить клиентам отменять заявку до отправки товара',
   'dash.settings.allowTracking': 'Разрешить клиентам указывать трек-номер',
   'dash.settings.credit': 'Бонусы магазина',
-  'dash.settings.currency': 'Валюта магазина',
-  'dash.settings.currencyHelp': 'Трехбуквенный код валюты (например, RUB, USD, EUR).',
   'dash.settings.dropOff': 'Сдать в магазине',
   'dash.settings.expiry': 'Срок действия карты (мес.)',
   'dash.settings.expiryHelp': 'Оставьте пустым для бессрочного действия.',

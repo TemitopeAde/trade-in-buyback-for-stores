@@ -67,3 +67,25 @@
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* Quill (trade-in terms editor) themed with the dashboard tokens. */
+.terms-editor .ql-toolbar.ql-snow,
+.terms-editor .ql-container.ql-snow { border-color: var(--input); }
+.terms-editor .ql-toolbar.ql-snow { border-start-start-radius: calc(var(--radius) - 2px); border-start-end-radius: calc(var(--radius) - 2px); }
+.terms-editor .ql-container.ql-snow { border-end-start-radius: calc(var(--radius) - 2px); border-end-end-radius: calc(var(--radius) - 2px); font-family: inherit; font-size: 0.875rem; }
+.terms-editor .ql-editor { min-height: 14rem; max-height: 32rem; color: var(--foreground); }
+.terms-editor .ql-editor:focus-visible { outline: 3px solid color-mix(in oklab, var(--ring) 50%, transparent); outline-offset: -1px; }
+.terms-editor .ql-snow .ql-stroke { stroke: var(--foreground); }
+.terms-editor .ql-snow .ql-fill { fill: var(--foreground); }
+.terms-editor .ql-snow .ql-picker { color: var(--foreground); }
+.terms-editor .ql-snow .ql-picker-options { background: var(--background); }
+
+/* Read-only trade-in terms (sanitized HTML) on the request detail page. */
+.terms-content > * + * { margin-top: 0.6em; }
+.terms-content h1, .terms-content h2, .terms-content h3, .terms-content h4 { font-weight: 600; }
+.terms-content ul, .terms-content ol { padding-inline-start: 1.4em; }
+.terms-content ul, .terms-content li[data-list="bullet"] { list-style-type: disc; }
+.terms-content ol, .terms-content li[data-list="ordered"] { list-style-type: decimal; }
+.terms-content a { color: var(--primary); text-decoration: underline; }
+.terms-content blockquote { border-inline-start: 3px solid var(--border); padding-inline-start: 0.75rem; color: var(--muted-foreground); }
+.terms-content th, .terms-content td { border: 1px solid var(--border); padding: 0.25rem 0.5rem; text-align: start; }

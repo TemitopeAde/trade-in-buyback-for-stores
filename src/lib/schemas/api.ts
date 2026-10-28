@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { TradeInAction, TradeInStatus } from '../lifecycle';
 import type { MediaKind } from '../media-limits';
-import { conditionAnswersSchema, HANDOFF_METHODS, type HandoffMethod, type VideoMode } from './domain';
+import { conditionAnswersSchema, customItemSchema, HANDOFF_METHODS, type HandoffMethod, type VideoMode } from './domain';
 
 // Request schemas and response DTOs shared by widgets/dashboard (clients) and API routes.
 // Clients use them for early validation and typing; servers re-validate every request.
@@ -36,11 +36,13 @@ export const confirmUploadRequest = z.object({
 });
 export const sessionStatusRequest = z.object({ uploadSessionId: z.string().min(40).max(64) });
 
+// A catalog product (productId) or a customer-described custom item, never both.
 export const submitRequest = z.object({
   submissionKey: idempotencyKey,
-  productId,
+  productId: productId.optional(),
+  customItem: customItemSchema.optional(),
   orderId: z.string().max(64).optional(),
-  answers: conditionAnswersSchema,
+  answers: conditionAnswersSchema.default({}),
   uploadSessionId: z.string().min(40).max(64).optional(),
   mediaIds: z.array(z.string().min(1).max(64)).max(12).default([]),
   handoffMethod: z.enum(HANDOFF_METHODS),
@@ -51,13 +53,15 @@ export const submitRequest = z.object({
   }),
   acceptTerms: z.literal(true),
   locale: z.string().max(16).default('en'),
-});
+})
+  .refine((r) => !!r.productId !== !!r.customItem, { path: ['productId'], message: 'product_or_custom_item' })
+  .refine((r) => !r.customItem || !r.orderId, { path: ['orderId'], message: 'not_allowed' });
 export type SubmitRequest = z.infer<typeof submitRequest>;
 
 export const customerLookupRequest = z.object({ token: accessToken.optional(), tradeInId: z.string().max(64).optional() })
   .refine((r) => r.token || r.tradeInId, 'token_or_id');
 
-export const CUSTOMER_ACTIONS = ['cancel', 'mark_in_transit', 'accept_revised_offer', 'decline_revised_offer'] as const satisfies readonly TradeInAction[];
+export const CUSTOMER_ACTIONS = ['cancel', 'mark_in_transit', 'accept_quote', 'decline_quote', 'accept_revised_offer', 'decline_revised_offer'] as const satisfies readonly TradeInAction[];
 export const customerActionRequest = z.object({
   token: accessToken.optional(),
   tradeInId: z.string().max(64).optional(),
@@ -67,7 +71,8 @@ export const customerActionRequest = z.object({
   idempotencyKey,
 });
 
-export const myTradeInsRequest = z.object({ cursor: z.int().min(0).max(10_000).default(0) });
+// GET input comes from the query string, so the cursor arrives as a string.
+export const myTradeInsRequest = z.object({ cursor: z.coerce.number().int().min(0).max(10_000).default(0) });
 
 // ---- Response DTOs ----
 
@@ -83,13 +88,17 @@ export type FormConfig = {
   questions: PublicQuestion[];
   media: { photoMinimum: number; videoMode: VideoMode; videoMaxSeconds: number };
   handoffMethods: { method: HandoffMethod; address?: string; instructions?: string }[];
-  termsText: string;
+  /** Sanitized HTML. */
+  termsHtml: string;
   upToMinor?: number;
   currency?: string;
   statusPageUrl?: string;
+  /** Config for describing a custom item (no product, no questions; the offer is quoted later). */
+  custom?: boolean;
 };
 
-export type ProductCtaResponse = { eligible: boolean; upToMinor?: number; currency?: string; formPageUrl?: string };
+/** `accepting: false` — the product qualifies but the store can't take new requests right now. */
+export type ProductCtaResponse = { eligible: boolean; accepting?: boolean; upToMinor?: number; currency?: string; formPageUrl?: string };
 
 export type EstimateResponse =
   | { eligible: true; offerMinor: number; currency: string; complete: boolean }
@@ -111,9 +120,13 @@ export type CustomerTradeInView = {
   revision: number;
   createdAt: string;
   product: { title: string; imageUrl?: string };
+  /** A custom item: the value shown is a quote from the store, not a calculated estimate. */
+  custom: boolean;
   currency: string;
+  /** 0 for a custom item that has no accepted quote yet. */
   estimatedValueMinor: number;
   finalValueMinor?: number;
+  quote?: { amountMinor: number; expiresAt?: string };
   revisedOffer?: { amountMinor: number; reason?: string; expiresAt?: string };
   rejectionReason?: string;
   /** True when the gift card code is known not to have been emailed (the store sends it instead). */
@@ -123,7 +136,7 @@ export type CustomerTradeInView = {
   timeline: CustomerTimelineEntry[];
 };
 
-export type MyTradeInRow = { tradeInId: string; reference: string; status: TradeInStatus; productTitle: string; createdAt: string; estimatedValueMinor: number; currency: string };
+export type MyTradeInRow = { tradeInId: string; reference: string; status: TradeInStatus; productTitle: string; createdAt: string; estimatedValueMinor: number; currency: string; custom: boolean };
 export type MyTradeInsResponse = { items: MyTradeInRow[]; nextCursor?: number; signedIn: boolean; statusPageUrl?: string; formPageUrl?: string };
 
 export type ApiError = { error: { code: string; fields?: Record<string, string> } };

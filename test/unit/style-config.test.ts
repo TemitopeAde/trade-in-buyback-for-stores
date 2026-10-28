@@ -118,9 +118,11 @@ describe('theme mapping', () => {
   it('maps to CSS vars that never exceed the container on mobile', () => {
     const vars = styleToCssVars(themeDefaults());
     expect(vars['--ti-max-width']).toBe('min(100%, 720px)');
-    expect(vars['--ti-font-body']).toBe('inherit');
-    expect(vars['--ti-font-modal']).toBe('Helvetica, Arial, sans-serif');
-    expect(vars['--ti-font-modal-heading']).toBe('Helvetica, Arial, sans-serif');
+    expect(vars['--ti-font-body']).toBe('normal normal 400 16px/1.5 "Helvetica Neue", Helvetica, Arial, sans-serif');
+    expect(vars['--ti-font-body-family']).toBe('"Helvetica Neue", Helvetica, Arial, sans-serif');
+    expect(vars['--ti-font-heading']).toBe('"Helvetica Neue", Helvetica, Arial, sans-serif');
+    expect(vars['--ti-font-modal']).toBe('"Helvetica Neue", Helvetica, Arial, sans-serif');
+    expect(vars['--ti-font-modal-heading']).toBe('"Helvetica Neue", Helvetica, Arial, sans-serif');
     expect(vars['--ti-weight-button']).toBe('400');
   });
 

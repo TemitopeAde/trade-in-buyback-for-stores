@@ -19,6 +19,8 @@ import { getCatalogVersion, WixCatalogService } from './services/WixCatalogServi
 import { WixMediaService } from './services/WixMediaService';
 import { WixOrdersService } from './services/WixOrdersService';
 import { WixSitePluginsService } from './services/WixSitePluginsService';
+import { WixSitePropertiesService } from './services/WixSitePropertiesService';
+import { isDevelopment } from './environment';
 import { PlanService } from './services/PlanService';
 import { CTA_PLUGIN_ID } from '../lib/schemas/admin';
 import { wixDataRepo } from './wixDataRepo';
@@ -26,7 +28,7 @@ import { wixDataRepo } from './wixDataRepo';
 // Production wiring. Services are stateless apart from small caches, so module singletons are fine.
 
 const repo = wixDataRepo;
-export const planService = new PlanService();
+export const planService = new PlanService(isDevelopment() ? { devPlan: 'business' } : {});
 export const idempotency = new IdempotencyService(repo);
 export const outbox = new OutboxService(repo, () => new Date(), (i, op, k) => idempotency.lock(i, op, k));
 export const settings = new SettingsService(repo, planService);
@@ -38,7 +40,8 @@ export const lifecycle = new TradeInLifecycleService(repo, idempotency, outbox);
 export const catalog = new WixCatalogService();
 export const orders = new WixOrdersService();
 export const sitePlugins = new WixSitePluginsService();
-export const tradeIns = new TradeInService({ repo, catalog, orders, rules, settings, media, lifecycle, idempotency, outbox, tokens, plan: planService });
+export const siteProperties = new WixSitePropertiesService();
+export const tradeIns = new TradeInService({ repo, catalog, orders, rules, settings, media, lifecycle, idempotency, outbox, tokens, plan: planService, siteCurrency: (i) => siteProperties.currency(i) });
 export const giftCards = new WixGiftCardsService();
 export const emails = new WixEmailTransmissionsService();
 export const credit = new CreditService(lifecycle, giftCards, settings, outbox);

@@ -96,12 +96,9 @@ export function Loading({ label, className }: { label?: string; className?: stri
   const text = label === undefined ? t('common.loading') : label;
   return (
     <p className={['ti-helper', className].filter(Boolean).join(' ')} role="status" aria-live="polite">
-      <span
-        className="ti-button__spinner"
-        aria-hidden="true"
-        style={{ display: 'inline-block', marginInlineEnd: text ? 8 : 0, verticalAlign: 'middle' }}
-      />
-      {text}
+      <span className="ti-button__spinner" aria-hidden="true" style={{ display: 'inline-block', verticalAlign: 'middle' }} />
+      {/* Spinner only on screen; the label stays for screen readers. */}
+      {text && <span className="ti-visually-hidden">{text}</span>}
     </p>
   );
 }

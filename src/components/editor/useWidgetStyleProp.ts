@@ -35,6 +35,16 @@ export function useWidgetStyleProp(kind: WidgetKind): StylePropState {
   const generation = useRef(0);
   const lastFonts = useRef('');
 
+  // setPreloadFonts overwrites the whole list, so always pass every font in use. The key is
+  // recorded only after the call succeeds, so a failed call is retried on the next sync.
+  const syncPreloadFonts = useCallback(async (value: TradeInWidgetStyle) => {
+    const fonts = fontsToPreload(value);
+    const key = fonts.join('|');
+    if (key === lastFonts.current) return;
+    await widget.setPreloadFonts(fonts);
+    lastFonts.current = key;
+  }, []);
+
   const write = useCallback(async () => {
     if (inFlight.current) {
       queued.current = true;
@@ -48,13 +58,7 @@ export function useWidgetStyleProp(kind: WidgetKind): StylePropState {
         const value = latest.current;
         if (!value || gen !== generation.current) break;
         await widget.setProp(STYLE_PROP, serializeStyleConfig(value, kind));
-        const fonts = fontsToPreload(value);
-        const key = fonts.join('|');
-        // setPreloadFonts overwrites the whole list, so always pass every font in use.
-        if (key !== lastFonts.current) {
-          lastFonts.current = key;
-          await widget.setPreloadFonts(fonts);
-        }
+        await syncPreloadFonts(value);
       } while (queued.current);
       setSaveError(false);
     } catch {
@@ -62,21 +66,24 @@ export function useWidgetStyleProp(kind: WidgetKind): StylePropState {
     } finally {
       inFlight.current = false;
     }
-  }, [kind]);
+  }, [kind, syncPreloadFonts]);
 
   const load = useCallback(async () => {
     try {
       const parsed = parseStyleConfig(await widget.getProp(STYLE_PROP), kind);
       latest.current = parsed;
-      lastFonts.current = fontsToPreload(parsed).join('|');
       setStyle(parsed);
+      // The saved config can name fonts the site was never told to preload (an earlier failed
+      // call, a duplicated instance), so re-send the list once per instance load.
+      lastFonts.current = '';
+      await syncPreloadFonts(parsed).catch(() => undefined);
     } catch {
       // Unreadable props fall back to defaults; the first edit persists a valid config.
       const parsed = parseStyleConfig(null, kind);
       latest.current = parsed;
       setStyle(parsed);
     }
-  }, [kind]);
+  }, [kind, syncPreloadFonts]);
 
   useEffect(() => {
     void load();

@@ -22,6 +22,7 @@ export function OverviewPage() {
         ['dash.setup.stores', data.setup.storesInstalled, undefined],
         ['dash.setup.rules', data.setup.hasRules, '/rules'],
         ['dash.setup.settings', data.setup.settingsSaved, '/settings'],
+        ['dash.setup.terms', data.setup.termsConfigured, '/settings'],
         ['dash.setup.formPage', data.setup.formPageConfigured, '/settings'],
         ['dash.setup.statusPage', data.setup.statusPageConfigured, '/settings'],
         ...(data.setup.pluginPlaced !== undefined ? [['dash.setup.pluginPlaced', data.setup.pluginPlaced, '/appearance'] as const] : []),
@@ -108,7 +109,7 @@ export function OverviewPage() {
             <ul className="grid gap-2">
               {data.recent.map((e) => (
                 <li key={e.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                  <span>{e.toStatus ? t(`status.${e.toStatus}`) : e.eventType === 'note.added' ? t('dash.event.note') : t('dash.event.other', { event: e.eventType })} · <span className="text-muted-foreground">{t(`dash.actor.${e.actorType}`)}</span></span>
+                  <span>{e.toStatus ? t(`status.${e.toStatus}`) : e.eventType === 'note.added' ? t('dash.event.note') : e.eventType === 'trade_in.deleted' ? t('dash.event.deleted') : t('dash.event.other', { event: e.eventType })} · <span className="text-muted-foreground">{t(`dash.actor.${e.actorType}`)}</span></span>
                   <time className="text-muted-foreground" dateTime={e.at}>{formatDateTime(e.at, locale)}</time>
                 </li>
               ))}

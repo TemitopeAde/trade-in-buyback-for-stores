@@ -6,6 +6,7 @@ import { TRADE_IN_STATUSES } from '../../lib/lifecycle';
 import { adminApi } from '../api';
 import { LoadError, PageHeader, StatusBadge, useMoney } from '../components';
 import { useDashboard, useLoad } from '../context';
+import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
 import { Input, NativeSelect } from '../ui/input';
@@ -102,9 +103,18 @@ export function RequestsPage({ initialGroup }: { initialGroup?: AdminListRequest
                             <Button variant="link" className="h-auto px-0 font-mono" aria-label={t('dash.requests.open', { reference: r.reference })} onClick={(e) => { e.stopPropagation(); go(`/requests/${r.id}`); }}>{r.reference}</Button>
                           </TableCell>
                           <TableCell><div className="grid"><span>{r.customerName}</span><span className="text-xs text-muted-foreground">{r.customerEmail}</span></div></TableCell>
-                          <TableCell className="max-w-56 truncate">{r.productTitle}</TableCell>
+                          <TableCell className="max-w-56">
+                            <div className="grid">
+                              <span className="truncate">{r.productTitle}</span>
+                              {r.custom && <Badge variant="outline" className="w-fit">{t('dash.requests.custom')}</Badge>}
+                            </div>
+                          </TableCell>
                           <TableCell className="text-muted-foreground">{r.categoryId ? `${r.categoryId.slice(0, 8)}…` : '—'}</TableCell>
-                          <TableCell className="text-end tabular-nums">{money(r.finalValueMinor ?? r.estimatedValueMinor, r.currency)}</TableCell>
+                          <TableCell className="text-end tabular-nums">
+                            {r.custom && !r.estimatedValueMinor && r.finalValueMinor === undefined
+                              ? <span className="text-muted-foreground">{t('dash.requests.needsQuote')}</span>
+                              : money(r.finalValueMinor ?? r.estimatedValueMinor, r.currency)}
+                          </TableCell>
                           <TableCell><StatusBadge status={r.status} /></TableCell>
                           <TableCell className="text-muted-foreground"><time dateTime={r.createdAt}>{formatDate(r.createdAt, locale)}</time></TableCell>
                         </TableRow>

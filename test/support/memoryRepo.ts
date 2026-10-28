@@ -77,6 +77,7 @@ export class MemoryRepo implements Repo {
   async insert<T extends Doc>(collection: string, doc: Omit<T, '_id'> & { _id?: string }) {
     this.maybeFail('insert', collection);
     const c = this.coll(collection);
+    if (doc._id && c.has(doc._id)) throw new DuplicateKeyError(); // like Wix Data's WDE0074
     for (const keys of UNIQUE[collection] ?? []) {
       const clash = [...c.values()].some((d) => keys.every((k) => d[k] === (doc as Record<string, unknown>)[k]));
       if (clash) throw new DuplicateKeyError();
@@ -105,5 +106,9 @@ export class MemoryRepo implements Repo {
 
   async remove(collection: string, id: string) {
     this.coll(collection).delete(id);
+  }
+
+  async bulkRemove(collection: string, ids: string[]) {
+    for (const id of ids) this.coll(collection).delete(id);
   }
 }

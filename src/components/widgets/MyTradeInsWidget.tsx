@@ -20,6 +20,7 @@ export function MyTradeInsWidget({ styleConfig, embedded, designMode }: MyTradeI
     <WidgetThemeProvider
       styleConfig={styleConfig}
       locale={env.locale}
+      currency={env.currency}
       isEditor={isEditor}
       as={embedded ? 'div' : 'section'}
       hostHeader={embedded}
@@ -99,7 +100,7 @@ function MineList() {
               <span><strong>{r.productTitle}</strong></span>
               <span className="ti-status-chip">{t(`status.${r.status}`)}</span>
               <span className="ti-list__meta">
-                {t('common.reference')}: {r.reference} · {formatDate(r.createdAt, locale)} · {formatMoney(r.estimatedValueMinor, r.currency, locale)}
+                {t('common.reference')}: {r.reference} · {formatDate(r.createdAt, locale)} · {r.custom && !r.estimatedValueMinor ? t('status.awaitingOffer') : formatMoney(r.estimatedValueMinor, r.currency, locale)}
               </span>
               {href && <a className="ti-button ti-button--link" href={href} aria-label={`${t('common.viewDetails')}: ${r.reference}`}>{t('common.viewDetails')}</a>}
             </li>
@@ -115,7 +116,7 @@ function MineList() {
 }
 
 function MinePreview() {
-  const { t, locale } = useWidget();
+  const { t, locale, currency } = useWidget();
   return (
     <div className="ti-stack">
       <ul className="ti-list">
@@ -123,7 +124,7 @@ function MinePreview() {
           <li key={status} className="ti-list__item">
             <span><strong>{t('preview.productTitle')}</strong></span>
             <span className="ti-status-chip">{t(`status.${status}`)}</span>
-            <span className="ti-list__meta">{t('common.reference')}: TI-XXXX-000{i} · {formatDate(new Date(), locale)} · {formatMoney(12000, 'USD', locale)}</span>
+            <span className="ti-list__meta">{t('common.reference')}: TI-XXXX-000{i} · {formatDate(new Date(), locale)}{currency && <> · {formatMoney(12000, currency, locale)}</>}</span>
           </li>
         ))}
       </ul>

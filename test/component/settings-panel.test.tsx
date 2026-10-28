@@ -99,6 +99,25 @@ describe('TradeInWidgetSettingsPanel', () => {
     expect(setPreloadFonts).toHaveBeenCalledWith([expect.stringContaining('avenir')]);
   });
 
+  it('re-sends saved fonts to the preload list when the panel opens', async () => {
+    const font = 'normal normal 700 20px/1.4em avenir-lt-w01_85-heavy1475544,sans-serif';
+    instances.a = { 'style-config': serializeStyleConfig({ ...themeDefaults(), typography: { ...themeDefaults().typography, bodyFont: font } }, 'form') };
+    renderPanel();
+    await waitFor(() => expect(setPreloadFonts).toHaveBeenCalledWith([font]));
+  });
+
+  it('retries preloading fonts after a failed call', async () => {
+    setPreloadFonts.mockRejectedValueOnce(new Error('offline'));
+    renderPanel();
+    await openSection('Text');
+    const fontButtons = await screen.findAllByRole('button', { name: 'Choose font' });
+    fireEvent.click(fontButtons[0]);
+    await flushDebounce();
+    fireEvent.click(fontButtons[1]);
+    await flushDebounce();
+    expect(setPreloadFonts).toHaveBeenCalledTimes(2);
+  });
+
   it('sets font and color per text element and resets one element to default', async () => {
     colorPick = '#ff0066';
     renderPanel();

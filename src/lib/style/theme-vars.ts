@@ -14,6 +14,9 @@ function headingSize(style: TradeInWidgetStyle): number {
   return size === undefined ? style.typography.headingSize : clampRange('typography.headingSize', size);
 }
 
+/** Used wherever the merchant hasn't picked a font. */
+export const DEFAULT_FONT_FAMILY = '"Helvetica Neue", Helvetica, Arial, sans-serif';
+
 export type ThemeVars = Record<`--ti-${string}`, string>;
 
 /**
@@ -34,10 +37,11 @@ function textFontVars(name: string, shorthand: string, fallback: { size?: string
 
 export function styleToCssVars(style: TradeInWidgetStyle): ThemeVars {
   const { colors: c, typography: t, buttons: b, layout: l, surfaces: s } = style;
-  const bodyFont = safeFontShorthand(t.bodyFont) ?? 'inherit';
-  const headingFamily = fontFamilyFromShorthand(t.headingFont) ?? (fontFamilyFromShorthand(t.bodyFont) ?? 'inherit');
-  const modalBodyFamily = fontFamilyFromShorthand(t.bodyFont) ?? 'Helvetica, Arial, sans-serif';
-  const modalHeadingFamily = fontFamilyFromShorthand(t.headingFont) ?? modalBodyFamily;
+  // Without a picked body font the widget still sets its own size and line height: inheriting
+  // them from the host page (the drawer sits in <body>) made inputs smaller than their help text.
+  const bodyFont = safeFontShorthand(t.bodyFont) ?? `normal normal ${t.bodyWeight} ${t.bodySize}px/${t.lineHeight} ${DEFAULT_FONT_FAMILY}`;
+  const bodyFamily = fontFamilyFromShorthand(t.bodyFont) ?? DEFAULT_FONT_FAMILY;
+  const headingFamily = fontFamilyFromShorthand(t.headingFont) ?? bodyFamily;
   const cardBorder =
     l.cardStyle === 'flat' || !s.showCardBorder ? 'none' : `${s.borderWidth}px solid ${c.border}`;
   const cardShadow = l.cardStyle === 'elevated' ? SHADOW[s.shadow === 'none' ? 'subtle' : s.shadow] : SHADOW[s.shadow];
@@ -73,9 +77,10 @@ export function styleToCssVars(style: TradeInWidgetStyle): ThemeVars {
     '--ti-success': c.success,
     '--ti-link': c.link,
     '--ti-font-body': bodyFont,
+    '--ti-font-body-family': bodyFamily,
     '--ti-font-heading': headingFamily,
-    '--ti-font-modal': modalBodyFamily,
-    '--ti-font-modal-heading': modalHeadingFamily,
+    '--ti-font-modal': bodyFamily,
+    '--ti-font-modal-heading': headingFamily,
     '--ti-size-heading': `${headingSize(style)}px`,
     '--ti-size-body': `${t.bodySize}px`,
     '--ti-size-label': `${t.labelSize}px`,

@@ -49,7 +49,7 @@ export function RulesPage({ editId }: { editId?: string }) {
 
   if (editId) {
     const existing = editId === 'new' ? undefined : rules.find((r) => r._id === editId);
-    return <RuleEditor rule={existing} currency={settings.currency} onDone={() => { reload(); go('/rules'); }} />;
+    return <RuleEditor rule={existing} currency={settings.siteCurrency} onDone={() => { reload(); go('/rules'); }} />;
   }
 
   const canAddRule = rules.length < entitlements.maxRules;
@@ -202,8 +202,8 @@ function RuleEditor({ rule, currency, onDone }: { rule?: Rule; currency: string;
           </>
         }
       />
-      <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-        <div className="grid content-start gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="grid min-w-0 grid-cols-1 content-start gap-6">
           <Card>
             <CardContent className="grid gap-4 sm:grid-cols-2">
               <Field label={t('dash.rule.name')} htmlFor="r-name" required error={err('name')}>

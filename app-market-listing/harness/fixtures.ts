@@ -28,20 +28,25 @@ const QUESTIONS = [
   { id: 'cosmetic', label: 'What’s the cosmetic condition?', required: true, options: [{ id: 'like_new', label: 'Like new' }, { id: 'light', label: 'Light wear' }, { id: 'scratches', label: 'Visible scratches' }, { id: 'damaged', label: 'Damaged' }] },
 ];
 
+// ?photos=0 drops the upload requirement and ?methods=drop_off offers a single hand-off method,
+// so a script can reach the details step without uploading.
+const harnessParams = new URLSearchParams(globalThis.location?.search ?? '');
+
 const formConfig = (productId: string): FormConfig => {
   const p = CATALOG.find((c) => c.productId === productId) ?? CATALOG[0];
+  const methods = harnessParams.get('methods')?.split(',');
   return {
     eligible: true,
     accepting: true,
     uploads: true,
     product: { productId: p.productId, title: p.title, imageUrl: p.imageUrl },
     questions: QUESTIONS,
-    media: { photoMinimum: 3, videoMode: 'optional', videoMaxSeconds: 30 },
-    handoffMethods: [
+    media: harnessParams.get('photos') === '0' ? { photoMinimum: 0, videoMode: 'off', videoMaxSeconds: 0 } : { photoMinimum: 3, videoMode: 'optional', videoMaxSeconds: 30 },
+    handoffMethods: ([
       { method: 'drop_off', address: '214 Harbor Street, Portland, OR', instructions: 'Show your reference code at the counter.' },
       { method: 'ship_in', address: 'Northline Returns, 88 Depot Rd, Portland, OR' },
-    ],
-    termsText: 'Final value is confirmed after inspection. Credit is issued as a store gift card.',
+    ] as FormConfig['handoffMethods']).filter((m) => !methods || methods.includes(m.method)),
+    termsHtml: '<p>Final value is confirmed after inspection. Credit is issued as a store gift card.</p>',
     upToMinor: 9000,
     currency: 'USD',
   };
@@ -66,6 +71,7 @@ const STATUS_VIEW: CustomerTradeInView = {
   revision: 6,
   createdAt: daysAgo(6),
   product: { title: 'Aero Wireless Headphones', imageUrl: img('headphones') },
+  custom: false,
   currency: 'USD',
   estimatedValueMinor: 7200,
   revisedOffer: { amountMinor: 6000, reason: 'The left ear cushion is worn and will need replacing.', expiresAt: daysAgo(-6) },
@@ -96,6 +102,7 @@ const ROWS: AdminTradeInRow[] = [
   customerName: customerName as string,
   customerEmail: customerEmail as string,
   productTitle: productTitle as string,
+  custom: false,
   estimatedValueMinor: est as number,
   finalValueMinor: status === 'credit_issued' || status === 'closed' ? (est as number) : undefined,
   currency: 'USD',
@@ -141,14 +148,14 @@ const OVERVIEW: OverviewResponse = {
   usage: { used: 28, limit: null },
   recent: DETAIL.timeline.slice().reverse().map((e, i) => ({ ...e, id: `r${i}` })),
   setup: {
-    storesInstalled: true, catalogVersion: 'V3', hasRules: true, settingsSaved: true, formPageConfigured: true,
+    storesInstalled: true, catalogVersion: 'V3', hasRules: true, settingsSaved: true, termsConfigured: true, formPageConfigured: true,
     statusPageConfigured: true, pluginPlaced: true, giftCardsAvailable: true, giftCardEmailWorking: true, emailConfigured: true,
   },
 };
 
 const MINE: MyTradeInsResponse = {
   signedIn: true,
-  items: ROWS.slice(0, 4).map((r) => ({ tradeInId: r.id, reference: r.reference, status: r.status, productTitle: r.productTitle, createdAt: r.createdAt, estimatedValueMinor: r.estimatedValueMinor, currency: r.currency })),
+  items: ROWS.slice(0, 4).map((r) => ({ tradeInId: r.id, reference: r.reference, status: r.status, productTitle: r.productTitle, createdAt: r.createdAt, estimatedValueMinor: r.estimatedValueMinor, currency: r.currency, custom: r.custom })),
 };
 
 // ?state=credit: the same request after the merchant confirmed the value (promo film end state).

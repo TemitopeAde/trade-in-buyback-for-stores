@@ -20,6 +20,7 @@ export const shots = [
   { name: 'form', query: 'scene=form&product=p-aero&step=condition', size: [1020, 1040] },
   { name: 'cta', query: 'scene=cta', size: [1020, 640] },
   { name: 'cta-open', query: 'scene=cta&open=1', size: [1020, 760] },
+  { name: 'cta-details', query: 'scene=cta&open=1&step=details&photos=0&methods=drop_off&hostfont=11', size: [1020, 900] },
   { name: 'status-mobile', query: 'scene=status&ti=demoAccessToken0123456789&mobile', frame: [390, 844] },
   { name: 'form-mobile', query: 'scene=form&product=p-aero&step=condition&mobile&scroll=560', frame: [390, 844] },
   { name: 'dash-overview', query: 'scene=dash&path=/', size: [1180, 900] },

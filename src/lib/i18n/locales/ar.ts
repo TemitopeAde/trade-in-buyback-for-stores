@@ -333,8 +333,6 @@ export const ar: Catalog = {
   'dash.settings.allowCancel': 'السماح للعميل بإلغاء الطلب قبل إرسال المنتج',
   'dash.settings.allowTracking': 'السماح للعميل بإدخال رقم تتبع الشحنة',
   'dash.settings.credit': 'رصيد المتجر',
-  'dash.settings.currency': 'رمز العملة',
-  'dash.settings.currencyHelp': 'رمز العملة المكون من ثلاثة أحرف كبيرة (مثل SAR, AED, USD, EGP).',
   'dash.settings.dropOff': 'التسليم في المتجر الفعلي',
   'dash.settings.expiry': 'صلاحية بطاقة الهدايا (بالأشهر)',
   'dash.settings.expiryHelp': 'اتركه فارغاً لصلاحية غير محددة.',

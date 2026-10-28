@@ -13,6 +13,9 @@
   color: var(--ti-text);
   background: var(--ti-background);
   font: var(--ti-font-body);
+  /* After the shorthand, so the default family (Helvetica) applies even if a picked shorthand's
+     family list is rejected. */
+  font-family: var(--ti-font-body-family, "Helvetica Neue", Helvetica, Arial, sans-serif);
   letter-spacing: var(--ti-letter-spacing);
   overflow-wrap: anywhere;
 }
@@ -145,15 +148,23 @@
   font-weight: var(--ti-input-weight, inherit);
   font-style: var(--ti-input-style, inherit);
 }
+.ti-input::placeholder, .ti-textarea::placeholder { color: var(--ti-muted); opacity: 1; }
+.ti-input:hover, .ti-textarea:hover, .ti-select:hover { border-color: color-mix(in srgb, var(--ti-border) 50%, var(--ti-text)); }
+/* Fields show focus with an accent border and a soft ring (2px, non-text contrast is the accent). */
+.ti-root .ti-input:focus-visible, .ti-root .ti-textarea:focus-visible, .ti-root .ti-select:focus-visible {
+  outline: 2px solid var(--ti-primary);
+  outline-offset: -1px;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ti-primary) 18%, transparent);
+}
 .ti-input[aria-invalid='true'], .ti-textarea[aria-invalid='true'] { border-color: var(--ti-error); }
 .ti-field-error { margin: 0; color: var(--ti-error); font-size: var(--ti-size-helper); font-weight: 600; }
 
 /* Choice tiles (radio groups) */
-.ti-choices { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr)); gap: 8px; border: 0; padding: 0; margin: 0; }
+.ti-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 10px; border: 0; padding: 0; margin: 0; }
 .ti-choice {
   position: relative;
-  display: flex; align-items: center; gap: 10px;
-  padding: 12px; min-block-size: 44px;
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 14px 16px; min-block-size: 44px;
   border: var(--ti-input-border-width) solid var(--ti-border);
   border-radius: var(--ti-input-radius);
   background: var(--ti-input-bg);
@@ -164,10 +175,52 @@
   font-style: var(--ti-input-style, inherit);
   cursor: pointer;
 }
-.ti-choice:has(input:checked) { border-color: var(--ti-primary); box-shadow: inset 0 0 0 1px var(--ti-primary); }
-.ti-choice input { accent-color: var(--ti-primary); inline-size: 18px; block-size: 18px; margin: 0; flex: none; }
-.ti-choice:focus-within { outline: 3px solid var(--ti-primary); outline-offset: 2px; }
-.ti-choice__body { display: flex; flex-direction: column; gap: 2px; min-inline-size: 0; }
+.ti-choice:hover { border-color: color-mix(in srgb, var(--ti-border) 50%, var(--ti-text)); }
+.ti-choice:has(input:checked) {
+  border-color: var(--ti-primary);
+  box-shadow: inset 0 0 0 1px var(--ti-primary);
+  background: color-mix(in srgb, var(--ti-primary) 5%, var(--ti-input-bg));
+}
+/* Nudged down so the control lines up with the first line of text. */
+.ti-choice input { accent-color: var(--ti-primary); inline-size: 18px; block-size: 18px; margin: 0.15em 0 0; flex: none; cursor: pointer; }
+/* The tile shows keyboard focus; the control inside doesn't get a second ring. */
+.ti-root .ti-choice input:focus-visible { outline: none; box-shadow: none; }
+.ti-choice:has(input:focus-visible) { outline: 2px solid var(--ti-primary); outline-offset: 2px; }
+.ti-choice__body { display: flex; flex-direction: column; gap: 4px; min-inline-size: 0; line-height: 1.4; }
+.ti-choice__title { font-weight: 600; }
+.ti-choice__body .ti-helper { line-height: 1.45; }
+
+/* Single checkbox (terms): a plain row, not a tile. */
+.ti-check {
+  display: flex; align-items: flex-start; gap: 10px;
+  color: var(--ti-text);
+  font-family: var(--ti-label-family, inherit);
+  line-height: 1.4;
+  cursor: pointer;
+}
+.ti-check input { accent-color: var(--ti-primary); inline-size: 18px; block-size: 18px; margin: 0.1em 0 0; flex: none; cursor: pointer; }
+
+/* Merchant terms (sanitized HTML from the dashboard editor). */
+.ti-terms {
+  max-block-size: 320px; overflow-y: auto;
+  margin-block-start: 8px; padding: 12px 14px;
+  border: 1px solid var(--ti-border); border-radius: var(--ti-radius);
+  background: var(--ti-surface);
+  color: var(--ti-text); font-size: var(--ti-size-helper); line-height: 1.55;
+}
+.ti-terms > :first-child { margin-block-start: 0; }
+.ti-terms > :last-child { margin-block-end: 0; }
+.ti-terms p, .ti-terms ul, .ti-terms ol, .ti-terms blockquote, .ti-terms table { margin-block: 0 0.75em; }
+.ti-terms h1, .ti-terms h2, .ti-terms h3, .ti-terms h4 { margin-block: 1em 0.5em; color: var(--ti-heading); font-size: 1.1em; line-height: 1.3; }
+.ti-terms ul, .ti-terms ol { padding-inline-start: 1.4em; }
+.ti-terms li[data-list="bullet"] { list-style-type: disc; }
+.ti-terms li[data-list="ordered"] { list-style-type: decimal; }
+.ti-terms a { color: var(--ti-primary); text-decoration: underline; }
+.ti-terms blockquote { padding-inline-start: 12px; border-inline-start: 3px solid var(--ti-border); color: var(--ti-muted); }
+.ti-terms table { border-collapse: collapse; inline-size: 100%; }
+.ti-terms th, .ti-terms td { padding: 4px 8px; border: 1px solid var(--ti-border); text-align: start; vertical-align: top; }
+.ti-terms .ql-align-center { text-align: center; }
+.ti-terms .ql-align-right { text-align: end; }
 
 /* Stepper */
 .ti-stepper { display: flex; gap: 8px; list-style: none; margin: 0; padding: 0; flex-wrap: wrap; }
@@ -894,27 +947,13 @@ trade-in-product-cta {
   font-family: var(--ti-font-modal, "Helvetica Neue", Helvetica, Arial, sans-serif);
 }
 
-.ti-drawer,
-.ti-drawer *,
-.ti-drawer input,
-.ti-drawer button,
-.ti-drawer select,
-.ti-drawer textarea {
-  font-family: var(--ti-font-modal, "Helvetica Neue", Helvetica, Arial, sans-serif);
-}
-
-/* Text elements with their own font keep it inside the drawer. */
-.ti-drawer .ti-description { font-family: var(--ti-description-family, inherit); }
-.ti-drawer .ti-helper,
-.ti-drawer .ti-list__meta { font-family: var(--ti-helper-family, inherit); }
-.ti-drawer .ti-label { font-family: var(--ti-label-family, inherit); }
-.ti-drawer .ti-input,
-.ti-drawer .ti-textarea,
-.ti-drawer .ti-select,
-.ti-drawer .ti-choice { font-family: var(--ti-input-family, inherit); }
-.ti-drawer .ti-button--primary { font-family: var(--ti-btn-family, inherit); }
-.ti-drawer .ti-button--secondary { font-family: var(--ti-btn2-family, inherit); }
-.ti-drawer .ti-button--link { font-family: var(--ti-link-family, inherit); }
+/*
+ * Everything in the drawer inherits the modal font from .ti-drawer, so text elements with
+ * their own font (labels, buttons, inputs…) keep it, and so does text nested inside them.
+ * Form controls don't inherit fonts by default; :where() keeps this at zero specificity so
+ * every per-element font rule still wins.
+ */
+:where(.ti-drawer) :where(input, button, select, textarea) { font-family: inherit; }
 
 .ti-drawer .ti-heading,
 .ti-drawer .ti-subheading,
@@ -1022,3 +1061,7 @@ trade-in-product-cta {
   }
   .ti-row--end > .ti-button, .ti-row--between > .ti-button { flex: 1 1 auto; }
 }
+
+/* Custom (non-catalog) item entry */
+.ti-custom-cta { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding-block-start: 4px; }
+.ti-custom-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 12px; }

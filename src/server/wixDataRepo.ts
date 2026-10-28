@@ -12,6 +12,7 @@ const elevated = {
   update: auth.elevate(items.update),
   bulkUpdate: auth.elevate(items.bulkUpdate),
   remove: auth.elevate(items.remove),
+  bulkRemove: auth.elevate(items.bulkRemove),
 };
 
 type Query = items.WixDataQuery;
@@ -95,5 +96,10 @@ export const wixDataRepo: Repo = {
   },
   async remove(collection, id) {
     await elevated.remove(collection, id);
+  },
+  async bulkRemove(collection, ids) {
+    if (!ids.length) return;
+    const res = await elevated.bulkRemove(collection, ids);
+    if (res.errors?.length) throw new Error(`bulkRemove failed for ${res.errors.length} item(s)`);
   },
 };

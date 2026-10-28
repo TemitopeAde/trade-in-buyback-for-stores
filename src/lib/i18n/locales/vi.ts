@@ -333,8 +333,6 @@ export const vi: Catalog = {
   'dash.settings.allowCancel': 'Cho phép khách tự hủy đơn trước khi gửi sản phẩm',
   'dash.settings.allowTracking': 'Cho phép khách nhập mã vận đơn theo dõi',
   'dash.settings.credit': 'Tín dụng cửa hàng',
-  'dash.settings.currency': 'Mã tiền tệ',
-  'dash.settings.currencyHelp': 'Mã tiền tệ gồm ba chữ cái viết hoa (ví dụ: VND, USD, EUR).',
   'dash.settings.dropOff': 'Gửi trực tiếp tại cửa hàng',
   'dash.settings.expiry': 'Hạn sử dụng thẻ quà tặng (tháng)',
   'dash.settings.expiryHelp': 'Để trống nếu không giới hạn thời gian hết hạn.',

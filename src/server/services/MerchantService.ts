@@ -1,4 +1,6 @@
 import { availableActions, type TradeInStatus } from '../../lib/lifecycle';
+import { monthStart } from '../../lib/plans';
+import { hasTerms } from '../../lib/terms';
 import {
   MERCHANT_ACTIONS,
   STATUS_GROUPS,
@@ -14,8 +16,8 @@ import {
 import { COLLECTIONS } from '../collections';
 import { randomToken } from '../crypto';
 import { AppError } from '../errors';
-import type { FindOptions, Repo, Where } from '../repo';
-import type { Actor, TradeInDoc, TradeInEventDoc } from '../types';
+import { DuplicateKeyError, type Doc, type FindOptions, type Repo, type Where } from '../repo';
+import { TRADE_IN_DELETED_EVENT, type Actor, type TradeInDoc, type TradeInEventDoc } from '../types';
 import type { RulesService } from './RulesService';
 import type { SettingsService } from './SettingsService';
 import type { TradeInLifecycleService } from './TradeInLifecycleService';
@@ -93,8 +95,11 @@ export class MerchantService {
       orderId: doc.orderId,
       productId: doc.productId,
       productImageUrl: doc.productSnapshot?.imageUrl,
+      customItem: doc.customItem,
       conditionAnswers: labels,
       offerBreakdown: doc.offerBreakdown,
+      quotedValueMinor: doc.quotedValueMinor,
+      quoteExpiresAt: iso(doc.quoteExpiresAt),
       revisedValueMinor: doc.revisedValueMinor,
       revisedOfferReason: doc.revisedOfferReason,
       revisedOfferExpiresAt: iso(doc.revisedOfferExpiresAt),
@@ -108,6 +113,8 @@ export class MerchantService {
       giftCardEmailStatus: doc.giftCardEmailStatus,
       resaleProductId: doc.resaleProductId,
       resaleDraftStatus: doc.resaleDraftStatus,
+      termsHtml: doc.termsHtml,
+      termsAcceptedAt: iso(doc.termsAcceptedAt),
       notes: (doc.internalNotes ?? []).map((n) => ({ id: n.id, text: n.text, createdAt: n.createdAt })),
       media: media.map((m) => ({ mediaId: m.mediaId, kind: m.kind, status: m.status, url: m.url })),
       timeline: events.map(toTimeline),
@@ -130,6 +137,23 @@ export class MerchantService {
     const reason = req.reason?.trim();
 
     switch (req.action) {
+      case 'approve':
+        // A custom item has no estimate to approve; it is approved by the customer accepting a quote.
+        if (doc.customItem) throw new AppError('invalid_transition', 'custom item needs a quote');
+        break;
+      case 'send_quote': {
+        if (!doc.customItem) throw new AppError('invalid_transition', 'quotes are for custom items');
+        const amount = req.quotedValueMinor;
+        if (!amount) throw new AppError('bad_request', 'amount required', { quotedValueMinor: 'required' });
+        if (amount < settings.credit.minimumCreditMinor) throw new AppError('bad_request', 'below minimum', { quotedValueMinor: 'below_minimum' });
+        patch.quotedValueMinor = amount;
+        patch.quoteExpiresAt = new Date(this.now().getTime() + settings.revisedOfferExpiryDays * 86_400_000);
+        break;
+      }
+      case 'accept_quote':
+        if (doc.quotedValueMinor === undefined) throw new AppError('invalid_transition', 'no quote');
+        patch.estimatedValueMinor = doc.quotedValueMinor;
+        break;
       case 'reject':
       case 'reject_after_inspection':
         if (!reason) throw new AppError('bad_request', 'reason required', { reason: 'required' });
@@ -200,6 +224,44 @@ export class MerchantService {
     return this.detail(instanceId, tradeInId);
   }
 
+  /**
+   * Permanently deletes a request with its evidence files, timeline, email log, pending jobs and
+   * customer access links. Refused while store credit is being issued, so a gift card can't be
+   * created for a request that no longer exists. Safe to retry: the request record goes last.
+   */
+  async deleteTradeIn(instanceId: string, actor: Actor, tradeInId: string): Promise<void> {
+    const doc = await this.d.lifecycle.load(instanceId, tradeInId);
+    if (doc.status === 'credit_pending') throw new AppError('conflict', 'credit in progress', { status: 'credit_pending' });
+
+    const scope = { instanceId, tradeInId };
+    const ids = async (collection: string) => (await this.d.repo.find<Doc>(collection, scope, { limit: 1000 })).items.map((d) => d._id);
+    const tombstoneId = `deleted-${tradeInId}`;
+    const [events, notifications, outbox, tokens] = await Promise.all([
+      ids(COLLECTIONS.events),
+      ids(COLLECTIONS.notifications),
+      ids(COLLECTIONS.outbox),
+      ids(COLLECTIONS.accessTokens),
+    ]);
+
+    // Deleting a request doesn't give back its slot in this month's plan allowance.
+    if (doc._createdDate && new Date(doc._createdDate) >= monthStart(this.now())) {
+      try {
+        await this.d.repo.insert<TradeInEventDoc>(COLLECTIONS.events, {
+          _id: tombstoneId, instanceId, tradeInId, eventType: TRADE_IN_DELETED_EVENT, actorType: actor.type, actorId: actor.id,
+        });
+      } catch (err) {
+        if (!(err instanceof DuplicateKeyError)) throw err; // left by an earlier, interrupted attempt
+      }
+    }
+
+    await this.d.media.removeForTradeIn(instanceId, tradeInId);
+    await this.d.repo.bulkRemove(COLLECTIONS.events, events.filter((id) => id !== tombstoneId));
+    await this.d.repo.bulkRemove(COLLECTIONS.notifications, notifications);
+    await this.d.repo.bulkRemove(COLLECTIONS.outbox, outbox);
+    await this.d.repo.bulkRemove(COLLECTIONS.accessTokens, tokens);
+    await this.d.repo.remove(COLLECTIONS.tradeIns, tradeInId);
+  }
+
   async overview(instanceId: string): Promise<Omit<OverviewResponse, 'usage'>> {
     const groups = Object.keys(STATUS_GROUPS) as (keyof typeof STATUS_GROUPS)[];
     const counts = Object.fromEntries(
@@ -225,6 +287,7 @@ export class MerchantService {
         catalogVersion,
         hasRules: (await this.d.rules.listEnabled(instanceId)).length > 0,
         settingsSaved: await this.d.settings.exists(instanceId),
+        termsConfigured: hasTerms(settings.termsHtml),
         formPageConfigured: !!settings.pages.formPageUrl,
         statusPageConfigured: !!settings.pages.statusPageUrl,
         pluginPlaced: this.d.pluginPlaced ? await this.d.pluginPlaced().catch(() => false) : undefined,
@@ -256,6 +319,7 @@ function toRow(d: TradeInDoc): AdminTradeInRow {
     customerName: d.customerName,
     customerEmail: d.customerEmail,
     productTitle: d.productTitle,
+    custom: !!d.customItem,
     categoryId: d.categoryId,
     estimatedValueMinor: d.estimatedValueMinor,
     finalValueMinor: d.finalValueMinor,
@@ -279,8 +343,11 @@ function toTimeline(e: TradeInEventDoc): AdminTimelineEntry {
   };
 }
 
-export function merchantActions(doc: { status: TradeInStatus; handoffMethod: string; revisedValueMinor?: number }, revisedOffers = true): MerchantAction[] {
+export function merchantActions(doc: { status: TradeInStatus; handoffMethod: string; revisedValueMinor?: number; customItem?: unknown }, revisedOffers = true): MerchantAction[] {
+  // Custom items are quoted instead of approved; catalog items already have an estimate.
+  const custom = !!doc.customItem;
   return availableActions(doc.status, 'merchant').filter((a): a is MerchantAction =>
-    (MERCHANT_ACTIONS as readonly string[]).includes(a) && (a !== 'mark_in_transit' || doc.handoffMethod === 'ship_in') && (a !== 'send_revised_offer' || revisedOffers),
+    (MERCHANT_ACTIONS as readonly string[]).includes(a) && (a !== 'mark_in_transit' || doc.handoffMethod === 'ship_in') && (a !== 'send_revised_offer' || revisedOffers) &&
+    (a !== 'approve' || !custom) && (a !== 'send_quote' || custom),
   );
 }

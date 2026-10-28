@@ -18,6 +18,9 @@ const scene = params.get('scene') ?? 'form';
 const mobile = params.has('mobile');
 const theme = (params.get('theme') ?? 'light') as ThemeName;
 const style = (kind: WidgetKind) => serializeStyleConfig(themeDefaults(theme, kind), kind);
+// ?hostfont=11 gives the storefront a small body font, as many Wix sites have; the drawer is
+// portaled into <body>, so this checks the widget doesn't pick it up.
+if (params.get('hostfont')) document.body.style.fontSize = `${Number(params.get('hostfont'))}px`;
 
 function Store({ children, narrow }: { children: ReactNode; narrow?: boolean }) {
   return (
@@ -120,6 +123,17 @@ const choose = (question: string, option: string) => {
   }
   if (scene === 'cta' && params.has('open')) {
     (await until(() => document.querySelector<HTMLButtonElement>('.ti-cta button'))).click();
+    // ?step=details walks the drawer to its last step (pair with ?photos=0).
+    if (params.get('step') === 'details') {
+      for (let i = 0; i < 6 && !button('Submit trade-in'); i++) {
+        if (document.querySelector('fieldset legend')?.textContent?.includes('power on')) {
+          choose('power on', 'Yes, fully working');
+          choose('cosmetic', 'Light wear');
+        }
+        (await until(() => button('Continue'))).click();
+        await new Promise((r) => setTimeout(r, 300));
+      }
+    }
   }
   if (scene === 'panel' && params.get('open')) {
     const title = params.get('open')!;

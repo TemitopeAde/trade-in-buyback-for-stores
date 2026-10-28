@@ -1,24 +1,28 @@
 import { useEffect, useState } from 'react';
 import { members } from '@wix/members';
+import { site } from '@wix/site-site';
 import { multilingual, window as wixWindow } from '@wix/site-window';
 import { resolveLocale } from '../../../lib/i18n';
 
 // Detects where the widget runs. In the Editor we render a styled preview and never call the
 // backend (the Editor sandbox has no visitor session and data calls would return noise).
 
-export type SiteEnv = { ready: boolean; isEditor: boolean; locale: string };
+/** `currency`: the site's payment currency; undefined when the host can't report it. */
+export type SiteEnv = { ready: boolean; isEditor: boolean; locale: string; currency?: string };
 
 export function useSiteEnv(): SiteEnv {
   const [env, setEnv] = useState<SiteEnv>({ ready: false, isEditor: false, locale: 'en' });
   useEffect(() => {
     let alive = true;
     (async () => {
-      const [mode, lang] = await Promise.all([
+      const [mode, lang, currency] = await Promise.all([
         wixWindow.viewMode().catch(() => 'Site'),
         multilingual.currentLanguage().catch(() => undefined),
+        // Deferred so a host without the site module rejects instead of throwing synchronously.
+        Promise.resolve().then(() => site.currency()).catch(() => undefined),
       ]);
       const fallbackLang = typeof document !== 'undefined' ? document.documentElement.lang : 'en';
-      if (alive) setEnv({ ready: true, isEditor: mode === 'Editor', locale: resolveLocale(lang || fallbackLang) });
+      if (alive) setEnv({ ready: true, isEditor: mode === 'Editor', locale: resolveLocale(lang || fallbackLang), currency: currency || undefined });
     })();
     return () => {
       alive = false;

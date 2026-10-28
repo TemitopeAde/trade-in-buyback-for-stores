@@ -94,6 +94,7 @@ export class AriaToolsService {
       case 'explain-estimate': {
         const doc = await this.byReference(I, payload);
         const b = doc.offerBreakdown;
+        if (!b) return { customItem: true, note: 'Custom item: there is no calculated estimate. Staff quote an offer after reviewing the description and photos.', quote: doc.quotedValueMinor !== undefined ? fmt(doc.quotedValueMinor, doc.currency) : undefined };
         const rule = await this.d.rules.get(I, b.ruleId).catch(() => undefined);
         return {
           productPrice: fmt(b.basePriceMinor, doc.currency), payoutPercent: b.payoutBasisPoints / 100, baseOffer: fmt(b.baseOfferMinor, doc.currency),
@@ -110,7 +111,7 @@ export class AriaToolsService {
         const concerns: string[] = [];
         if (photos < (doc.mediaRequirements?.photoMinimum ?? 0)) concerns.push('fewer photos than the rule requires');
         if (doc.mediaRequirements?.videoMode === 'required' && !d.media.some((m) => m.kind === 'video')) concerns.push('required video missing');
-        if (d.offerBreakdown.clampedTo === 'minimum') concerns.push('offer was raised to the rule minimum');
+        if (d.offerBreakdown?.clampedTo === 'minimum') concerns.push('offer was raised to the rule minimum');
         if (d.media.some((m) => m.status === 'processing')) concerns.push('some media is still processing');
         return {
           advisoryOnly: true,
@@ -163,6 +164,7 @@ export class AriaToolsService {
     switch (methodName) {
       case 'approve-trade-in': {
         const doc = await this.byReference(I, p);
+        if (doc.customItem) throw new AppError('bad_request', 'custom item needs a quote: send one from the request page', { reference: 'quote_required' });
         return { summary: `Approve ${doc.reference} (${doc.productTitle}, estimate ${fmt(doc.estimatedValueMinor, doc.currency)}). The customer will receive hand-off instructions.`, revisionKey: key(doc), args: {}, execute: act(doc, 'approve') };
       }
       case 'reject-trade-in': {

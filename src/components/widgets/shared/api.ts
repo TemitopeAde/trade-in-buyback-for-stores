@@ -52,6 +52,7 @@ export const widgetApi = {
   orderItems: () => call<CatalogItem[]>('/api/catalog/order-items'),
   productCta: (productId: string) => call<ProductCtaResponse>('/api/catalog/product-cta', { query: { productId } }),
   formConfig: (productId: string) => call<FormConfig>('/api/trade-ins/form-config', { query: { productId } }),
+  customItemConfig: () => call<FormConfig>('/api/trade-ins/custom-item-config'),
   estimate: (productId: string, answers: ConditionAnswers) => call<EstimateResponse>('/api/trade-ins/estimate', { method: 'POST', body: { productId, answers } }),
   uploadUrl: (body: { uploadSessionId?: string; kind: 'photo' | 'video'; mimeType: string; fileName: string; sizeBytes: number; durationSeconds?: number }) =>
     call<UploadTarget>('/api/media/upload-url', { method: 'POST', body }),

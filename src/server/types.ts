@@ -1,5 +1,5 @@
 import type { ActorType, TradeInStatus } from '../lib/lifecycle';
-import type { ConditionAnswers, HandoffMethod, OfferBreakdown, VideoMode } from '../lib/schemas/domain';
+import type { ConditionAnswers, CustomItem, HandoffMethod, OfferBreakdown, VideoMode } from '../lib/schemas/domain';
 import type { Doc } from './repo';
 
 export type ProductSnapshot = {
@@ -8,7 +8,8 @@ export type ProductSnapshot = {
   sku?: string;
   priceMinor: number;
   currency: string;
-  catalogVersion: 'V1_CATALOG' | 'V3_CATALOG';
+  /** Absent for custom items, which aren't in the catalog. */
+  catalogVersion?: 'V1_CATALOG' | 'V3_CATALOG';
   categoryIds: string[];
 };
 
@@ -37,15 +38,21 @@ export type TradeInDoc = Doc & {
   categoryId?: string;
   productTitle: string;
   productSnapshot: ProductSnapshot;
+  /** Set when the customer described an item that isn't in the catalog; productId is then ''. */
+  customItem?: CustomItem;
   conditionAnswers: ConditionAnswers;
+  /** Custom items: 0 until the customer accepts a quote, then the quoted amount. */
   estimatedValueMinor: number;
+  quotedValueMinor?: number;
+  quoteExpiresAt?: Date;
   finalValueMinor?: number;
   revisedValueMinor?: number;
   revisedOfferReason?: string;
   revisedOfferExpiresAt?: Date;
   currency: string;
   offerCalculationVersion: number;
-  offerBreakdown: OfferBreakdown;
+  /** Absent for custom items: their offer is quoted by staff, not calculated. */
+  offerBreakdown?: OfferBreakdown;
   status: TradeInStatus;
   revision: number;
   handoffMethod: HandoffMethod;
@@ -68,6 +75,9 @@ export type TradeInDoc = Doc & {
   closedAt?: Date;
   /** Media requirements captured at submission so later rule edits don't change them. */
   mediaRequirements?: { photoMinimum: number; videoMode: VideoMode; videoMaxSeconds: number };
+  /** Terms the customer accepted at submission; absent on requests made before this was recorded. */
+  termsHtml?: string;
+  termsAcceptedAt?: Date;
 };
 
 export type TradeInEventDoc = Doc & {
@@ -84,3 +94,9 @@ export type TradeInEventDoc = Doc & {
 };
 
 export type Actor = { type: ActorType; id?: string };
+
+/**
+ * Left on the events collection when a merchant deletes a request created this month, so the
+ * deletion still counts toward the plan's monthly allowance. Holds no customer data.
+ */
+export const TRADE_IN_DELETED_EVENT = 'trade_in.deleted';

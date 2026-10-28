@@ -333,8 +333,6 @@ export const de: Catalog = {
   'dash.settings.allowCancel': 'Kunden erlauben, vor dem Versand zu stornieren',
   'dash.settings.allowTracking': 'Kunden erlauben, Sendungsnummern anzugeben',
   'dash.settings.credit': 'Store-Guthaben',
-  'dash.settings.currency': 'Währungscode',
-  'dash.settings.currencyHelp': 'Dreistelliger Währungscode (z. B. EUR, USD, CHF).',
   'dash.settings.dropOff': 'Abgabe im Geschäft',
   'dash.settings.expiry': 'Gültigkeit der Geschenkkarte (Monate)',
   'dash.settings.expiryHelp': 'Leer lassen für unbegrenzte Gültigkeit.',

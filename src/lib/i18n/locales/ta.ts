@@ -333,8 +333,6 @@ export const ta: Catalog = {
   'dash.settings.allowCancel': 'பொருளை அனுப்பும் முன் வாடிக்கையாளர் ரத்துசெய்ய அனுமதிக்கவும்',
   'dash.settings.allowTracking': 'கூரியர் டிராக்கிங் எண்ணை உள்ளிட வாடிக்கையாளரை அனுமதிக்கவும்',
   'dash.settings.credit': 'ஸ்டோர் கடன்',
-  'dash.settings.currency': 'நாணயக் குறியீடு',
-  'dash.settings.currencyHelp': 'மூன்றெழுத்து நாணயக் குறியீடு (எ.கா. INR, USD, EUR).',
   'dash.settings.dropOff': 'கடையில் நேரடியாக வழங்குதல்',
   'dash.settings.expiry': 'பரிசு அட்டை காலாவதி (மாதங்கள்)',
   'dash.settings.expiryHelp': 'வரம்பற்ற காலாவதிக்கு காலியாக விடவும்.',

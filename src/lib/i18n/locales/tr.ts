@@ -333,8 +333,6 @@ export const tr: Catalog = {
   'dash.settings.allowCancel': 'Müşterinin kargoya vermeden önce iptal etmesine izin ver',
   'dash.settings.allowTracking': 'Müşterinin kargo takip numarası girmesine izin ver',
   'dash.settings.credit': 'Mağaza bakiyesi',
-  'dash.settings.currency': 'Para birimi kodu',
-  'dash.settings.currencyHelp': '3 harfli büyük harfli kod (ör. TRY, USD, EUR).',
   'dash.settings.dropOff': 'Mağazadan teslim alma',
   'dash.settings.expiry': 'Hediye kartı geçerlilik süresi (ay)',
   'dash.settings.expiryHelp': 'Süresiz geçerlilik için boş bırakın.',

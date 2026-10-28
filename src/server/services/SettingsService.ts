@@ -1,8 +1,10 @@
 import { applyPlanToSettings } from '../../lib/plans';
+import { textToHtml } from '../../lib/terms';
 import { defaultSettings, SETTINGS_SCHEMA_VERSION, settingsSchema, type Settings } from '../../lib/schemas/domain';
 import { COLLECTIONS } from '../collections';
 import { AppError } from '../errors';
 import { DuplicateKeyError, type Doc, type Repo } from '../repo';
+import { sanitizeTermsHtml } from '../sanitizeHtml';
 import type { PlanLimits } from './PlanService';
 
 type SettingsDoc = Doc & { instanceId: string; schemaVersion: number; settings: unknown; disconnected?: boolean };
@@ -29,12 +31,17 @@ export class SettingsService {
     if (!doc) return defaultSettings();
     const parsed = settingsSchema.safeParse(doc.settings);
     // A stored record that no longer validates (older schema) falls back field-by-field to defaults.
-    return parsed.success ? parsed.data : { ...defaultSettings(), ...(salvage(doc.settings) as Partial<Settings>) };
+    const settings = parsed.success ? parsed.data : { ...defaultSettings(), ...(salvage(doc.settings) as Partial<Settings>) };
+    // Terms used to be plain text in `termsText`.
+    const legacyTerms = (doc.settings as { termsText?: unknown } | undefined)?.termsText;
+    if (!settings.termsHtml && typeof legacyTerms === 'string' && legacyTerms.trim()) settings.termsHtml = textToHtml(legacyTerms);
+    return settings;
   }
 
   async save(instanceId: string, input: unknown): Promise<Settings> {
     const parsed = settingsSchema.safeParse(input);
     if (!parsed.success) throw new AppError('bad_request', 'invalid settings', flattenIssues(parsed.error.issues));
+    parsed.data.termsHtml = sanitizeTermsHtml(parsed.data.termsHtml);
     const existing = await this.doc(instanceId);
     const record = { instanceId, schemaVersion: SETTINGS_SCHEMA_VERSION, settings: parsed.data, disconnected: false };
     if (existing) await this.repo.update<SettingsDoc>(COLLECTIONS.settings, { ...existing, ...record });

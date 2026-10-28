@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDate, formatDateTime } from '../../lib/i18n';
 import { toPublicMediaUrl } from '../../lib/media';
@@ -26,7 +26,9 @@ import { DeliveryLog } from './Notifications';
 
 const NEEDS_REASON: MerchantAction[] = ['reject', 'reject_after_inspection', 'send_revised_offer'];
 const NEEDS_NOTES: MerchantAction[] = ['confirm_value', 'send_revised_offer', 'reject_after_inspection'];
-const DESTRUCTIVE: MerchantAction[] = ['reject', 'reject_after_inspection', 'cancel', 'decline_revised_offer'];
+const DESTRUCTIVE: MerchantAction[] = ['reject', 'reject_after_inspection', 'cancel', 'decline_revised_offer', 'decline_quote'];
+// Actions that take an amount, and the request field it is sent as.
+const AMOUNT_FIELD: Partial<Record<MerchantAction, 'revisedValueMinor' | 'quotedValueMinor'>> = { send_revised_offer: 'revisedValueMinor', send_quote: 'quotedValueMinor' };
 
 export function RequestDetailPage({ id }: { id: string }) {
   const { t, go, locale } = useDashboard();
@@ -40,7 +42,7 @@ export function RequestDetailPage({ id }: { id: string }) {
   const b = d.offerBreakdown;
 
   return (
-    <div className="grid gap-6">
+    <div className="grid grid-cols-1 gap-6">
       <div>
         <Button variant="ghost" size="sm" onClick={() => go('/requests')}><ArrowLeft className="rtl:rotate-180" aria-hidden="true" />{t('dash.back')}</Button>
       </div>
@@ -49,8 +51,8 @@ export function RequestDetailPage({ id }: { id: string }) {
         subtitle={`${d.productTitle} · ${formatDate(d.createdAt, locale)}`}
         actions={<StatusBadge status={d.status} />}
       />
-      <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
-        <div className="grid content-start gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="grid min-w-0 grid-cols-1 content-start gap-6">
           <Card>
             <CardHeader><CardTitle>{t('dash.detail.productAndCustomer')}</CardTitle></CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
@@ -70,6 +72,25 @@ export function RequestDetailPage({ id }: { id: string }) {
             </CardContent>
           </Card>
 
+          {d.customItem ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>{t('dash.detail.customItem')}</CardTitle>
+                <CardDescription>{t('dash.detail.customItemHelp')}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <dl className="grid gap-2 text-sm sm:grid-cols-2">
+                  <div><dt className="text-muted-foreground">{t('dash.detail.customName')}</dt><dd className="font-medium">{d.customItem.name}</dd></div>
+                  {d.customItem.brand && <div><dt className="text-muted-foreground">{t('dash.detail.customBrand')}</dt><dd className="font-medium">{d.customItem.brand}</dd></div>}
+                  {d.customItem.model && <div><dt className="text-muted-foreground">{t('dash.detail.customModel')}</dt><dd className="font-medium">{d.customItem.model}</dd></div>}
+                  {d.customItem.customerEstimateMinor !== undefined && (
+                    <div><dt className="text-muted-foreground">{t('dash.detail.customerEstimate')}</dt><dd className="font-medium tabular-nums">{money(d.customItem.customerEstimateMinor, d.currency)}</dd></div>
+                  )}
+                  <div className="sm:col-span-2"><dt className="text-muted-foreground">{t('dash.detail.customDescription')}</dt><dd className="whitespace-pre-wrap">{d.customItem.description}</dd></div>
+                </dl>
+              </CardContent>
+            </Card>
+          ) : (
           <Card>
             <CardHeader><CardTitle>{t('dash.detail.answers')}</CardTitle></CardHeader>
             <CardContent>
@@ -82,10 +103,12 @@ export function RequestDetailPage({ id }: { id: string }) {
               ) : <p className="text-sm text-muted-foreground">{t('dash.detail.noAnswers')}</p>}
             </CardContent>
           </Card>
+          )}
 
           <Card>
-            <CardHeader><CardTitle>{t('dash.detail.breakdown')}</CardTitle></CardHeader>
+            <CardHeader><CardTitle>{t(b ? 'dash.detail.breakdown' : 'dash.detail.offer')}</CardTitle></CardHeader>
             <CardContent>
+              {b ? (
               <dl className="grid gap-1.5 text-sm">
                 <Row label={t('dash.detail.basePrice')} value={money(b.basePriceMinor, d.currency)} />
                 <Row label={t('dash.detail.payout', { percent: (b.payoutBasisPoints / 100).toString() })} value={money(b.baseOfferMinor, d.currency)} />
@@ -99,6 +122,18 @@ export function RequestDetailPage({ id }: { id: string }) {
                 {d.revisedValueMinor !== undefined && <Row label={t('dash.detail.revised')} value={money(d.revisedValueMinor, d.currency)} strong />}
                 {d.finalValueMinor !== undefined && <Row label={t('dash.detail.final')} value={money(d.finalValueMinor, d.currency)} strong />}
               </dl>
+              ) : (
+                <dl className="grid gap-1.5 text-sm">
+                  {d.quotedValueMinor === undefined && <p className="text-muted-foreground">{t('dash.detail.noQuote')}</p>}
+                  {d.quotedValueMinor !== undefined && <Row label={t('dash.detail.quoted')} value={money(d.quotedValueMinor, d.currency)} strong />}
+                  {d.estimatedValueMinor > 0 && <Row label={t('dash.detail.estimate')} value={money(d.estimatedValueMinor, d.currency)} strong />}
+                  {d.revisedValueMinor !== undefined && <Row label={t('dash.detail.revised')} value={money(d.revisedValueMinor, d.currency)} strong />}
+                  {d.finalValueMinor !== undefined && <Row label={t('dash.detail.final')} value={money(d.finalValueMinor, d.currency)} strong />}
+                </dl>
+              )}
+              {d.quoteExpiresAt && d.status === 'quote_pending' && (
+                <p className="mt-2 text-xs text-muted-foreground">{t('dash.detail.quoteExpires', { date: formatDate(d.quoteExpiresAt, locale) })}</p>
+              )}
               {d.revisedOfferExpiresAt && d.status === 'revised_offer_pending' && (
                 <p className="mt-2 text-xs text-muted-foreground">{t('dash.detail.revisedExpires', { date: formatDate(d.revisedOfferExpiresAt, locale) })}</p>
               )}
@@ -142,12 +177,30 @@ export function RequestDetailPage({ id }: { id: string }) {
             </CardContent>
           </Card>
 
+          {d.termsAcceptedAt && (
+            <Card>
+              <CardHeader><CardTitle>{t('dash.detail.terms')}</CardTitle></CardHeader>
+              <CardContent className="grid gap-3">
+                <dl className="grid gap-1.5 text-sm">
+                  <Row label={t('dash.detail.termsAccepted')} value={formatDateTime(d.termsAcceptedAt, locale)} />
+                </dl>
+                {d.termsHtml && (
+                  <details className="text-sm">
+                    <summary className="cursor-pointer font-medium text-primary">{t('dash.detail.viewTerms')}</summary>
+                    {/* Saved from the store's terms, which are sanitized when the merchant saves them. */}
+                    <div className="terms-content mt-2 max-h-80 overflow-y-auto rounded-md border p-3" dangerouslySetInnerHTML={{ __html: d.termsHtml }} />
+                  </details>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {(d.status === 'credit_issued' || (d.status === 'closed' && d.giftCardStatus === 'issued')) && <ResaleCard detail={d} onUpdated={setData} />}
 
           <EmailsCard tradeInId={d.id} />
         </div>
 
-        <div className="grid content-start gap-6">
+        <div className="grid min-w-0 grid-cols-1 content-start gap-6">
           <ActionsCard detail={d} onUpdated={setData} reload={reload} />
           <NotesCard detail={d} onUpdated={setData} />
           <Card>
@@ -273,6 +326,54 @@ function Row({ label, value, strong }: { label: string; value: string; strong?: 
   );
 }
 
+function DeleteRequest({ detail, disabled }: { detail: AdminTradeInDetail; disabled: boolean }) {
+  const { t, go, errorText, entitlements } = useDashboard();
+  const [confirm, setConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const creditPending = detail.status === 'credit_pending';
+
+  const remove = async () => {
+    setDeleting(true);
+    try {
+      await adminApi.deleteTradeIn(detail.id);
+      toast.success(t('dash.delete.done', { reference: detail.reference }));
+      go('/requests');
+    } catch (err) {
+      const pending = err instanceof AdminApiError && err.fields?.status === 'credit_pending';
+      toast.error(pending ? t('dash.delete.creditPending') : errorText(err));
+      setDeleting(false);
+      setConfirm(false);
+    }
+  };
+
+  return (
+    <>
+      <Button variant="ghost" className="text-destructive hover:text-destructive" disabled={disabled || creditPending} title={creditPending ? t('dash.delete.creditPending') : undefined} onClick={() => setConfirm(true)}>
+        <Trash2 aria-hidden="true" />{t('dash.delete.button')}
+      </Button>
+      {creditPending && <p className="text-xs text-muted-foreground">{t('dash.delete.creditPending')}</p>}
+      <AlertDialog open={confirm} onOpenChange={(o) => !deleting && setConfirm(o)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('dash.delete.title', { reference: detail.reference })}</AlertDialogTitle>
+            <AlertDialogDescription>{t('dash.delete.confirm')}</AlertDialogDescription>
+          </AlertDialogHeader>
+          {(detail.giftCardStatus === 'issued' || entitlements.maxRequestsPerMonth !== Infinity) && (
+            <ul className="grid list-disc gap-1 ps-5 text-sm text-muted-foreground">
+              {detail.giftCardStatus === 'issued' && <li>{t('dash.delete.giftCard')}</li>}
+              {entitlements.maxRequestsPerMonth !== Infinity && <li>{t('dash.delete.usage')}</li>}
+            </ul>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel asChild><Button variant="outline" disabled={deleting}>{t('dash.cancel')}</Button></AlertDialogCancel>
+            <Button variant="destructive" busy={deleting} onClick={remove}>{t('dash.delete.button')}</Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
+
 function ActionsCard({ detail, onUpdated, reload }: { detail: AdminTradeInDetail; onUpdated: (d: AdminTradeInDetail) => void; reload: () => void }) {
   const { t, errorText } = useDashboard();
   const money = useMoney();
@@ -293,7 +394,8 @@ function ActionsCard({ detail, onUpdated, reload }: { detail: AdminTradeInDetail
     if (!open) return;
     const errs: Record<string, string> = {};
     if (NEEDS_REASON.includes(open) && !reason.trim()) errs.reason = t('dash.field.required');
-    if (open === 'send_revised_offer' && !amount) errs.revisedValueMinor = t('dash.field.required');
+    const amountField = AMOUNT_FIELD[open];
+    if (amountField && !amount) errs[amountField] = t('dash.field.required');
     setFieldErrors(errs);
     if (Object.keys(errs).length) return;
     setBusy(open);
@@ -301,7 +403,7 @@ function ActionsCard({ detail, onUpdated, reload }: { detail: AdminTradeInDetail
       const updated = await adminApi.act({
         tradeInId: detail.id, action: open, expectedRevision: detail.revision, idempotencyKey: newKey(),
         reason: reason.trim() || undefined, inspectionNotes: NEEDS_NOTES.includes(open) ? notes.trim() || undefined : undefined,
-        revisedValueMinor: open === 'send_revised_offer' ? amount : undefined, trackingNumber: tracking.trim() || undefined,
+        ...(amountField ? { [amountField]: amount } : {}), trackingNumber: tracking.trim() || undefined,
       });
       onUpdated(updated);
       toast.success(t('dash.action.done', { action: t(`dash.action.${open}`) }));
@@ -312,6 +414,7 @@ function ActionsCard({ detail, onUpdated, reload }: { detail: AdminTradeInDetail
         setFieldErrors({
           ...(f.reason ? { reason: t('dash.field.required') } : {}),
           ...(f.revisedValueMinor ? { revisedValueMinor: t(`dash.error.${f.revisedValueMinor as 'too_high'}`) } : {}),
+          ...(f.quotedValueMinor ? { quotedValueMinor: t(f.quotedValueMinor === 'required' ? 'dash.field.required' : 'dash.error.below_minimum') } : {}),
         });
       } else {
         toast.error(errorText(err));
@@ -325,6 +428,8 @@ function ActionsCard({ detail, onUpdated, reload }: { detail: AdminTradeInDetail
 
   const confirmText = (a: MerchantAction) => {
     if (a === 'confirm_value') return t('dash.confirm.confirm_value', { amount: money(detail.estimatedValueMinor, detail.currency) });
+    if (a === 'accept_quote') return t('dash.confirm.accept_quote', { amount: money(detail.quotedValueMinor, detail.currency) });
+    if (a === 'send_quote' || a === 'decline_quote') return t(`dash.confirm.${a}`);
     if (a === 'accept_revised_offer') return t('dash.confirm.accept_revised_offer', { amount: money(detail.revisedValueMinor, detail.currency) });
     if (a === 'approve' || a === 'reject' || a === 'send_revised_offer' || a === 'decline_revised_offer' || a === 'cancel') return t(`dash.confirm.${a}`);
     return t('dash.confirm.default');
@@ -340,6 +445,8 @@ function ActionsCard({ detail, onUpdated, reload }: { detail: AdminTradeInDetail
             {t(`dash.action.${a}`)}
           </Button>
         ))}
+        <Separator className="my-2" />
+        <DeleteRequest detail={detail} disabled={!!busy} />
       </CardContent>
       <AlertDialog open={!!open} onOpenChange={(o) => !o && !busy && setOpen(undefined)}>
         {open && (
@@ -349,9 +456,14 @@ function ActionsCard({ detail, onUpdated, reload }: { detail: AdminTradeInDetail
               <AlertDialogDescription>{confirmText(open)}</AlertDialogDescription>
             </AlertDialogHeader>
             <div className="grid gap-3">
-              {open === 'send_revised_offer' && (
-                <Field label={t('dash.field.revisedAmount', { currency: detail.currency })} htmlFor="act-amount" required error={fieldErrors.revisedValueMinor}>
-                  <MoneyInput id="act-amount" currency={detail.currency} value={amount} onChange={setAmount} aria-invalid={!!fieldErrors.revisedValueMinor} />
+              {AMOUNT_FIELD[open] && (
+                <Field
+                  label={t(open === 'send_quote' ? 'dash.field.quoteAmount' : 'dash.field.revisedAmount', { currency: detail.currency })}
+                  htmlFor="act-amount"
+                  required
+                  error={fieldErrors[AMOUNT_FIELD[open]!]}
+                >
+                  <MoneyInput id="act-amount" currency={detail.currency} value={amount} onChange={setAmount} aria-invalid={!!fieldErrors[AMOUNT_FIELD[open]!]} />
                 </Field>
               )}
               {NEEDS_REASON.includes(open) && (

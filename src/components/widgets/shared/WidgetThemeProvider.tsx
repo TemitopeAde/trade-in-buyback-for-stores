@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { Toaster } from 'sonner';
 import { createTranslator, direction, type Translate } from '../../../lib/i18n';
-import { parseStyleConfig, type TradeInWidgetStyle, type WidgetKind } from '../../../lib/style/style-config';
-import { styleToCssVars } from '../../../lib/style/theme-vars';
+import { fontFamilyFromShorthand, parseStyleConfig, type TradeInWidgetStyle, type WidgetKind } from '../../../lib/style/style-config';
+import { DEFAULT_FONT_FAMILY, styleToCssVars } from '../../../lib/style/theme-vars';
 import './widget.css';
 
 // Applies a validated per-instance style config as CSS custom properties on the widget root.
@@ -10,7 +10,8 @@ import './widget.css';
 
 // `hostHeader`: the widget is embedded in a host (Editor React component) that renders its own
 // title and description, so WidgetHeader renders nothing.
-type WidgetContextValue = { style: TradeInWidgetStyle; t: Translate; locale: string; isEditor: boolean; hostHeader: boolean };
+// `currency`: the site's payment currency, for Editor previews (live amounts carry their own).
+type WidgetContextValue = { style: TradeInWidgetStyle; t: Translate; locale: string; currency?: string; isEditor: boolean; hostHeader: boolean };
 
 const WidgetContext = createContext<WidgetContextValue | null>(null);
 
@@ -51,6 +52,7 @@ export function WidgetThemeProvider(props: {
   styleConfig?: string | null;
   kind?: WidgetKind;
   locale: string;
+  currency?: string;
   isEditor?: boolean;
   className?: string;
   labelledBy?: string;
@@ -62,10 +64,13 @@ export function WidgetThemeProvider(props: {
   const t = useMemo(() => createTranslator(props.locale), [props.locale]);
   const vars = useMemo(() => styleToCssVars(style) as CSSProperties, [style]);
   const value = useMemo(
-    () => ({ style, t, locale: props.locale, isEditor: !!props.isEditor, hostHeader: !!props.hostHeader }),
-    [style, t, props.locale, props.isEditor, props.hostHeader],
+    () => ({ style, t, locale: props.locale, currency: props.currency, isEditor: !!props.isEditor, hostHeader: !!props.hostHeader }),
+    [style, t, props.locale, props.currency, props.isEditor, props.hostHeader],
   );
   const ownsToaster = useOwnsToaster();
+  // Toasts render outside the widget root, so the --ti-* vars don't reach them; pass the body
+  // font family directly.
+  const toastOptions = useMemo(() => ({ style: { fontFamily: fontFamilyFromShorthand(style.typography.bodyFont) ?? DEFAULT_FONT_FAMILY } }), [style]);
   const Root = props.as ?? 'section';
   return (
     <WidgetContext.Provider value={value}>
@@ -78,7 +83,7 @@ export function WidgetThemeProvider(props: {
       >
         {props.children}
       </Root>
-      {ownsToaster && <Toaster position="bottom-right" richColors closeButton />}
+      {ownsToaster && <Toaster position="bottom-right" richColors closeButton toastOptions={toastOptions} />}
     </WidgetContext.Provider>
   );
 }

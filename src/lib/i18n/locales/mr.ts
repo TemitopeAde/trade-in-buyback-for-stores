@@ -333,8 +333,6 @@ export const mr: Catalog = {
   'dash.settings.allowCancel': 'वस्तू पाठवण्यापूर्वी ग्राहकाला विनंती रद्द करण्याची परवानगी द्या',
   'dash.settings.allowTracking': 'ग्राहकाला कुरिअर ट्रॅकिंग क्रमांक प्रविष्ट करण्याची परवानगी द्या',
   'dash.settings.credit': 'स्टोअर क्रेडिट',
-  'dash.settings.currency': 'चलन कोड',
-  'dash.settings.currencyHelp': 'तीन अक्षरी चलन कोड (उदा. INR, USD, EUR).',
   'dash.settings.dropOff': 'दुकानात थेट आणून देणे',
   'dash.settings.expiry': 'गिफ्ट कार्ड वैधता (महिने)',
   'dash.settings.expiryHelp': 'अमर्याद वैधतेसाठी रिक्त ठेवा.',

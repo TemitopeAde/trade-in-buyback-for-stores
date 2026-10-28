@@ -5,6 +5,7 @@
 export const TRADE_IN_STATUSES = [
   'submitted',
   'under_review',
+  'quote_pending',
   'approved',
   'rejected',
   'in_transit',
@@ -27,6 +28,9 @@ export type ActorType = 'merchant' | 'customer' | 'system' | 'assistant';
 
 export const TRADE_IN_ACTIONS = [
   'start_review',
+  'send_quote',
+  'accept_quote',
+  'decline_quote',
   'approve',
   'reject',
   'cancel',
@@ -57,6 +61,10 @@ const STAFF: readonly ActorType[] = ['merchant', 'assistant'];
 
 export const TRANSITIONS: Record<TradeInAction, TransitionRule> = {
   start_review: { from: ['submitted'], to: 'under_review', actors: STAFF },
+  // Custom (non-catalog) items have no computed estimate: staff quote one, the customer decides.
+  send_quote: { from: ['submitted', 'under_review'], to: 'quote_pending', actors: STAFF, valueChanging: true },
+  accept_quote: { from: ['quote_pending'], to: 'approved', actors: ['customer', 'merchant'] },
+  decline_quote: { from: ['quote_pending'], to: 'cancelled', actors: ['customer', 'merchant', 'system'] },
   approve: { from: ['submitted', 'under_review'], to: 'approved', actors: STAFF },
   reject: { from: ['submitted', 'under_review'], to: 'rejected', actors: STAFF, requiresReason: true },
   cancel: { from: ['submitted', 'under_review', 'approved', 'in_transit'], to: 'cancelled', actors: ['customer', 'merchant'] },

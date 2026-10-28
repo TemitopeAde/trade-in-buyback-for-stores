@@ -333,8 +333,6 @@ export const id: Catalog = {
   'dash.settings.allowCancel': 'Izinkan pelanggan membatalkan sebelum barang dikirim',
   'dash.settings.allowTracking': 'Izinkan pelanggan memasukkan nomor resi ekspedisi',
   'dash.settings.credit': 'Kredit toko',
-  'dash.settings.currency': 'Kode mata uang',
-  'dash.settings.currencyHelp': 'Kode mata uang 3 huruf kapital (contoh: IDR, USD, SGD).',
   'dash.settings.dropOff': 'Penyerahan di toko fisik',
   'dash.settings.expiry': 'Masa berlaku kartu hadiah (bulan)',
   'dash.settings.expiryHelp': 'Biarkan kosong jika berlaku selamanya tanpa kedaluwarsa.',

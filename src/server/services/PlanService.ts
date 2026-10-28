@@ -21,6 +21,9 @@ export class PlanService implements PlanLimits {
   private readonly mockPlans = new Map<string, PlanTier>();
   private readonly cache = new Map<string, { plan: PlanTier; at: number }>();
 
+  /** `devPlan` applies that tier to every instance without asking Wix (development only). */
+  constructor(private readonly opts: { devPlan?: PlanTier } = {}) {}
+
   /** Used by tests to override plan tier for an instance. */
   setMockPlan(instanceId: string, plan: PlanTier): void {
     this.mockPlans.set(instanceId, normalizePlanTier(plan));
@@ -36,7 +39,7 @@ export class PlanService implements PlanLimits {
    * (retryable) rather than silently treating a paying site as basic.
    */
   async entitlements(instanceId: string): Promise<PlanEntitlements> {
-    const mock = this.mockPlans.get(instanceId);
+    const mock = this.mockPlans.get(instanceId) ?? this.opts.devPlan;
     if (mock) return getPlanEntitlements(mock);
     const hit = this.cache.get(instanceId);
     if (hit && Date.now() - hit.at < CACHE_MS) return getPlanEntitlements(hit.plan);
@@ -59,7 +62,7 @@ export class PlanService implements PlanLimits {
   }
 
   async getPlanStatus(instanceId: string): Promise<InstancePlanStatus> {
-    const mock = this.mockPlans.get(instanceId);
+    const mock = this.mockPlans.get(instanceId) ?? this.opts.devPlan;
     if (mock) {
       const plan = normalizePlanTier(mock);
       const isFree = plan === 'basic';

@@ -28,10 +28,10 @@ export function toScreen(rect: Rect, crop: Crop, x: number, y: number) {
   return { x: rect.x + (x - crop.x) * s, y: rect.y + (y - crop.y) * s };
 }
 
-/** Center of a measured element, on screen. */
-export function targetOf(plate: string, label: string, rect: Rect, crop: Crop) {
+/** A point inside a measured element, on screen: `fx`/`fy` are shares of its box (0.5 = center). */
+export function targetOf(plate: string, label: string, rect: Rect, crop: Crop, fx = 0.5, fy = 0.5) {
   const [x, y, w, h] = plates[plate].rects[label];
-  return toScreen(rect, crop, x + w / 2, y + h / 2);
+  return toScreen(rect, crop, x + w * fx, y + h * fy);
 }
 
 export function Plate({ name, rect, crop, style }: { name: string; rect: Rect; crop: Crop; style?: CSSProperties }) {

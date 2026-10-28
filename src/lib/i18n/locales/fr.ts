@@ -332,8 +332,6 @@ export const fr: Catalog = {
   'dash.settings.allowCancel': 'Autoriser le client à annuler avant l’expédition',
   'dash.settings.allowTracking': 'Autoriser le client à renseigner un numéro de suivi',
   'dash.settings.credit': 'Crédit d’achat',
-  'dash.settings.currency': 'Code devise',
-  'dash.settings.currencyHelp': 'Code à 3 lettres en majuscules (ex. EUR, USD, CAD).',
   'dash.settings.dropOff': 'Dépôt en magasin',
   'dash.settings.expiry': 'Validité de la carte-cadeau (mois)',
   'dash.settings.expiryHelp': 'Laissez vide pour une validité illimitée.',

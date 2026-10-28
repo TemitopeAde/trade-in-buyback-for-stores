@@ -333,8 +333,6 @@ export const bn: Catalog = {
   'dash.settings.allowCancel': 'পণ্য পাঠানোর আগে গ্রাহককে অনুরোধ বাতিলের অনুমতি দিন',
   'dash.settings.allowTracking': 'গ্রাহককে কুরিয়ার ট্র্যাকিং নম্বর দেওয়ার অনুমতি দিন',
   'dash.settings.credit': 'স্টোর ক্রেডিট',
-  'dash.settings.currency': 'মুদ্রা কোড',
-  'dash.settings.currencyHelp': 'তিন অক্ষরের মুদ্রা কোড (যেমন BDT, USD, EUR).',
   'dash.settings.dropOff': 'দোকানে সরাসরি জমা দেওয়া',
   'dash.settings.expiry': 'গিফট কার্ডের মেয়াদ (মাস)',
   'dash.settings.expiryHelp': 'সীমাহীন মেয়াদের জন্য ফাঁকা রাখুন।',

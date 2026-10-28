@@ -6,7 +6,7 @@ import type { CustomerTradeInView, MyTradeInRow } from '../../lib/schemas/api';
 import { errorMessageKey, widgetApi } from './shared/api';
 import { newIdempotencyKey, readQueryParam, scrubQueryParam, useSiteEnv } from './shared/env';
 import { Alert, Loading, TradeInEmptyState, TradeInErrorState, WidgetButton, WidgetCard, WidgetField, WidgetHeader } from './shared/primitives';
-import { RevisedOfferCard, TradeInStatusTimeline } from './shared/Status';
+import { QuoteCard, RevisedOfferCard, TradeInStatusTimeline } from './shared/Status';
 import { useWidget, WidgetThemeProvider } from './shared/WidgetThemeProvider';
 
 export type TradeInStatusWidgetProps = { styleConfig?: string | null; embedded?: boolean; designMode?: boolean };
@@ -33,6 +33,7 @@ export function TradeInStatusWidget({ styleConfig, embedded, designMode }: Trade
     <WidgetThemeProvider
       styleConfig={styleConfig}
       locale={env.locale}
+      currency={env.currency}
       isEditor={isEditor}
       as={embedded ? 'div' : 'section'}
       hostHeader={embedded}
@@ -120,6 +121,7 @@ export function TradeInStatusView({ accessToken, tradeInId }: { accessToken?: st
     if (!view || busyAction) return;
     if (action === 'cancel' && !globalThis.confirm(t('status.cancelConfirm'))) return;
     if (action === 'decline_revised_offer' && !globalThis.confirm(t('revised.declineConfirm'))) return;
+    if (action === 'decline_quote' && !globalThis.confirm(t('quote.declineConfirm'))) return;
     setBusyAction(action);
     setActionError(undefined);
     try {
@@ -165,12 +167,20 @@ export function TradeInStatusView({ accessToken, tradeInId }: { accessToken?: st
             {view.rejectionReason && <p className="ti-helper">{t('status.rejectionReason', { reason: view.rejectionReason })}</p>}
           </div>
           <div className="ti-row">
-            <span>{view.finalValueMinor !== undefined ? t('status.final') : t('status.estimated')}: <strong>{money(view.finalValueMinor ?? view.estimatedValueMinor)}</strong></span>
+            {view.custom && !view.estimatedValueMinor && view.finalValueMinor === undefined ? (
+              <span>{t('status.estimated')}: <strong>{t('status.awaitingOffer')}</strong></span>
+            ) : (
+              <span>{view.finalValueMinor !== undefined ? t('status.final') : t('status.estimated')}: <strong>{money(view.finalValueMinor ?? view.estimatedValueMinor)}</strong></span>
+            )}
           </div>
         </div>
       </WidgetCard>
 
       {actionError && <Alert tone="error">{actionError}</Alert>}
+
+      {view.status === 'quote_pending' && (
+        <QuoteCard view={view} busyAction={busyAction} onAccept={() => act('accept_quote')} onDecline={() => act('decline_quote')} />
+      )}
 
       {view.status === 'revised_offer_pending' && (
         <RevisedOfferCard view={view} busyAction={busyAction} onAccept={() => act('accept_revised_offer')} onDecline={() => act('decline_revised_offer')} />
@@ -220,7 +230,7 @@ export function TradeInStatusView({ accessToken, tradeInId }: { accessToken?: st
 }
 
 function StatusEditorPreview() {
-  const { t, locale, style } = useWidget();
+  const { t, locale, currency, style } = useWidget();
   const now = new Date();
   return (
     <div className="ti-stack">
@@ -233,7 +243,7 @@ function StatusEditorPreview() {
           </div>
           <strong>{t('preview.productTitle')}</strong>
           <p style={{ margin: 0 }}>{t('statusMessage.approved')}</p>
-          <span>{t('status.estimated')}: <strong>{formatMoney(12000, 'USD', locale)}</strong></span>
+          {currency && <span>{t('status.estimated')}: <strong>{formatMoney(12000, currency, locale)}</strong></span>}
         </div>
       </WidgetCard>
       {style.content.showTimelineDetails && (

@@ -43,7 +43,7 @@ export function HandoffMethodSelector(props: {
           <label key={method} className="ti-choice">
             <input type="radio" name={`${id}-handoff`} value={method} checked={props.value === method} required onChange={() => props.onChange(method)} />
             <span className="ti-choice__body">
-              <strong>{t(method === 'drop_off' ? 'handoff.drop_off' : 'handoff.ship_in')}</strong>
+              <span className="ti-choice__title">{t(method === 'drop_off' ? 'handoff.drop_off' : 'handoff.ship_in')}</span>
               {style.content.showHelperText && (
                 <span className="ti-helper">{t(method === 'drop_off' ? 'handoff.drop_off.description' : 'handoff.ship_in.description')}</span>
               )}

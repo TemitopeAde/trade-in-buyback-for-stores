@@ -1,16 +1,20 @@
-import React, { useEffect, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { SUPPORTED_LOCALES } from '../../lib/i18n';
 import type { Settings } from '../../lib/schemas/domain';
+import { hasTerms } from '../../lib/terms';
 import { AdminApiError, adminApi } from '../api';
 import { LoadError, MoneyInput, PageHeader } from '../components';
 import { useDashboard, useLoad } from '../context';
 import { Button } from '../ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Input, NativeSelect, Textarea } from '../ui/input';
 import { Field, Label } from '../ui/label';
 import { Alert, Skeleton } from '../ui/misc';
 import { Switch } from '../ui/switch';
+
+// Quill touches `document` on import, so it loads only in the browser.
+const TermsEditor = lazy(() => import('../TermsEditor'));
 
 // Defined at module level so it isn't remounted on every render (keeps keyboard focus).
 function Toggle({ id, label, checked, onChange, disabledNote }: { id: string; label: string; checked: boolean; onChange: (v: boolean) => void; disabledNote?: string }) {
@@ -34,6 +38,8 @@ export function SettingsPage() {
   if (error) return <LoadError onRetry={reload} />;
   if (loading || !draft) return <Skeleton className="h-96" />;
   const s = draft;
+  // Amounts are entered in the site's payment currency (from its business info, not a setting).
+  const currency = data!.siteCurrency;
   const patch = (fn: (d: Settings) => Settings) => setDraft((d) => (d ? fn(structuredClone(d)) : d));
   const fieldErr = (path: string) => (errors[path] ? t('dash.saveError') : undefined);
   // Saved values are kept across plan changes; the form shows what applies on the current plan.
@@ -91,11 +97,8 @@ export function SettingsPage() {
       <Card>
         <CardHeader><CardTitle>{t('dash.settings.credit')}</CardTitle></CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
-          <Field label={t('dash.settings.currency')} htmlFor="s-currency" help={t('dash.settings.currencyHelp')} error={fieldErr('currency')}>
-            <Input id="s-currency" value={s.currency} maxLength={3} onChange={(e) => patch((d) => { d.currency = e.target.value.toUpperCase(); return d; })} />
-          </Field>
-          <Field label={t('dash.settings.minimumCredit', { currency: s.currency })} htmlFor="s-min" error={fieldErr('credit.minimumCreditMinor')}>
-            <MoneyInput id="s-min" currency={s.currency} value={s.credit.minimumCreditMinor} onChange={(v) => patch((d) => { d.credit.minimumCreditMinor = v ?? 0; return d; })} />
+          <Field label={t('dash.settings.minimumCredit', { currency })} htmlFor="s-min" error={fieldErr('credit.minimumCreditMinor')}>
+            <MoneyInput id="s-min" currency={currency} value={s.credit.minimumCreditMinor} onChange={(v) => patch((d) => { d.credit.minimumCreditMinor = v ?? 0; return d; })} />
           </Field>
           <Field label={t('dash.settings.expiry')} htmlFor="s-expiry" help={t('dash.settings.expiryHelp')} error={fieldErr('credit.expiryMonths')}>
             <Input id="s-expiry" type="number" min={1} max={120} value={s.credit.expiryMonths ?? ''} onChange={(e) => patch((d) => { d.credit.expiryMonths = e.target.value ? Number(e.target.value) : undefined; return d; })} />
@@ -116,12 +119,40 @@ export function SettingsPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader><CardTitle>{t('dash.settings.terms')}</CardTitle></CardHeader>
-        <CardContent>
-          <Field label={t('dash.settings.terms')} htmlFor="s-terms" help={t('dash.settings.termsHelp')} error={fieldErr('termsText')}>
-            <Textarea id="s-terms" rows={6} value={s.termsText} maxLength={5000} onChange={(e) => patch((d) => { d.termsText = e.target.value; return d; })} />
+      <Card id="terms">
+        <CardHeader>
+          <CardTitle>{t('dash.settings.terms')}</CardTitle>
+          <CardDescription>{t('dash.settings.termsHelp')}</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          {!hasTerms(s.termsHtml) && <Alert variant="warning">{t('dash.settings.termsMissing')}</Alert>}
+          <Field label={t('dash.settings.terms')} htmlFor="s-terms" error={fieldErr('termsHtml')}>
+            <Suspense fallback={<Skeleton className="h-56" />}>
+              <TermsEditor id="s-terms" value={s.termsHtml} describedBy={errors.termsHtml ? 's-terms-error' : undefined} onChange={(html) => patch((d) => { d.termsHtml = html; return d; })} />
+            </Suspense>
           </Field>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('dash.settings.customItems')}</CardTitle>
+          <CardDescription>{t('dash.settings.customItemsHelp')}</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <div className="self-end pb-2">
+            <Toggle id="s-custom" label={t('dash.settings.customItemsEnabled')} checked={s.customItems.enabled} onChange={(v) => patch((d) => { d.customItems.enabled = v; return d; })} />
+          </div>
+          {s.customItems.enabled && (
+            <Field
+              label={t('dash.settings.customItemsPhotos')}
+              htmlFor="s-custom-photos"
+              help={entitlements.mediaUploads ? undefined : t('dash.settings.customItemsNoUploads')}
+              error={fieldErr('customItems.photoMinimum')}
+            >
+              <Input id="s-custom-photos" type="number" min={0} max={10} value={s.customItems.photoMinimum} onChange={(e) => patch((d) => { d.customItems.photoMinimum = Number(e.target.value); return d; })} />
+            </Field>
+          )}
         </CardContent>
       </Card>
 
@@ -129,7 +160,7 @@ export function SettingsPage() {
         <CardHeader><CardTitle>{t('dash.settings.workflow')}</CardTitle></CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <Toggle id="s-cancel" label={t('dash.settings.allowCancel')} checked={s.allowCustomerCancel} onChange={(v) => patch((d) => { d.allowCustomerCancel = v; return d; })} />
-          <Field label={t('dash.settings.revisedExpiry')} htmlFor="s-rexp">
+          <Field label={t('dash.settings.revisedExpiry')} htmlFor="s-rexp" help={t('dash.settings.revisedExpiryHelp')}>
             <Input id="s-rexp" type="number" min={1} max={60} value={s.revisedOfferExpiryDays} onChange={(e) => patch((d) => { d.revisedOfferExpiryDays = Number(e.target.value); return d; })} />
           </Field>
           <Field

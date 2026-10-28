@@ -333,8 +333,6 @@ export const pt: Catalog = {
   'dash.settings.allowCancel': 'Permitir que o cliente cancele antes do envio',
   'dash.settings.allowTracking': 'Permitir que o cliente informe o código de rastreamento',
   'dash.settings.credit': 'Crédito na loja',
-  'dash.settings.currency': 'Código da moeda',
-  'dash.settings.currencyHelp': 'Código de três letras maiúsculas (ex. BRL, USD, EUR).',
   'dash.settings.dropOff': 'Entrega em loja física',
   'dash.settings.expiry': 'Validade do vale-presente (meses)',
   'dash.settings.expiryHelp': 'Deixe em branco para validade indeterminada.',

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { formatMoney } from '../../lib/money';
 import type { ProductCtaResponse } from '../../lib/schemas/api';
@@ -15,7 +15,7 @@ export type TradeInProductButtonWidgetProps = { styleConfig?: string | null; pro
 export function TradeInProductButtonWidget({ styleConfig, productId }: TradeInProductButtonWidgetProps) {
   const env = useSiteEnv();
   return (
-    <WidgetThemeProvider styleConfig={styleConfig} kind="product-cta" locale={env.locale} isEditor={env.isEditor} as="div" className="ti-root--cta">
+    <WidgetThemeProvider styleConfig={styleConfig} kind="product-cta" locale={env.locale} currency={env.currency} isEditor={env.isEditor} as="div" className="ti-root--cta">
       <Cta productId={productId ?? undefined} styleConfig={styleConfig} isEditor={env.isEditor} envReady={env.ready} />
     </WidgetThemeProvider>
   );
@@ -49,10 +49,11 @@ function Cta({
   isEditor: boolean;
   envReady: boolean;
 }) {
-  const { t, locale, style } = useWidget();
+  const { t, locale, currency, style } = useWidget();
   const [data, setData] = useState<ProductCtaResponse>();
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const pausedId = useId();
 
   useEffect(() => {
     if (!envReady) return;
@@ -82,7 +83,8 @@ function Cta({
   }, [productId, isEditor, envReady]);
 
   // In the Editor, show the styled button so merchants can design it; on the site, render
-  // a preloader until data is ready, and then render nothing for ineligible products.
+  // a preloader until data is ready, and then render nothing for ineligible products. A product
+  // that qualifies while the store isn't accepting requests gets a disabled button and a note.
   const preview = envReady && isEditor;
   const align = style.layout.alignment === 'center' ? 'center' : 'flex-start';
 
@@ -94,12 +96,13 @@ function Cta({
         </div>
       );
     }
-    if (!data?.eligible || !productId) return null;
+    if (!productId || (!data?.eligible && data?.accepting !== false)) return null;
   }
+  const paused = !preview && data?.accepting === false;
 
   const href = preview ? undefined : buildCtaHref(data?.formPageUrl, productId);
   const upTo = preview
-    ? formatMoney(12000, 'USD', locale)
+    ? currency && formatMoney(12000, currency, locale)
     : data?.upToMinor !== undefined && data.currency
       ? formatMoney(data.upToMinor, data.currency, locale)
       : undefined;
@@ -116,13 +119,21 @@ function Cta({
         <button
           type="button"
           className="ti-button ti-button--primary"
-          onClick={handleClick}
-          {...(href ? { 'data-href': href } : {})}
+          onClick={paused ? undefined : handleClick}
+          disabled={paused}
+          aria-describedby={paused ? pausedId : undefined}
+          {...(href && !paused ? { 'data-href': href } : {})}
         >
           {style.content.primaryLabel || t('cta.label')}
         </button>
-        {style.content.showProductEstimate && upTo && <span className="ti-helper">{t('form.offer.upTo', { amount: upTo })}</span>}
-        {style.content.showHelperText && <span className="ti-helper">{t('cta.helper')}</span>}
+        {paused ? (
+          <span id={pausedId} className="ti-helper">{t('cta.paused')}</span>
+        ) : (
+          <>
+            {style.content.showProductEstimate && upTo && <span className="ti-helper">{t('form.offer.upTo', { amount: upTo })}</span>}
+            {style.content.showHelperText && <span className="ti-helper">{t('cta.helper')}</span>}
+          </>
+        )}
       </div>
 
       {open && (
@@ -130,6 +141,7 @@ function Cta({
           productId={productId}
           styleConfig={styleConfig}
           locale={locale}
+          currency={currency}
           isEditor={isEditor}
           onClose={() => setOpen(false)}
         />
@@ -142,12 +154,14 @@ function TradeInDrawer({
   productId,
   styleConfig,
   locale,
+  currency,
   isEditor,
   onClose,
 }: {
   productId?: string;
   styleConfig?: string | null;
   locale: string;
+  currency?: string;
   isEditor: boolean;
   onClose: () => void;
 }) {
@@ -172,6 +186,7 @@ function TradeInDrawer({
     <WidgetThemeProvider
       styleConfig={styleConfig}
       locale={locale}
+      currency={currency}
       isEditor={isEditor}
       as="div"
       className="ti-drawer-overlay"
@@ -197,7 +212,7 @@ function TradeInDrawer({
           </button>
         </header>
         <div className="ti-drawer__body">
-          {isEditor ? <FormEditorPreview /> : <FormFlow initialProductId={productId} onClose={onClose} isModal={true} />}
+          {isEditor ? <FormEditorPreview /> : <FormFlow initialProductId={productId} onClose={onClose} />}
         </div>
       </aside>
     </WidgetThemeProvider>,

@@ -332,8 +332,6 @@ export const es: Catalog = {
   'dash.settings.allowCancel': 'Permitir que el cliente cancele antes de enviar el producto',
   'dash.settings.allowTracking': 'Permitir que el cliente introduzca número de seguimiento',
   'dash.settings.credit': 'Crédito de tienda',
-  'dash.settings.currency': 'Código de moneda',
-  'dash.settings.currencyHelp': 'Código de tres letras en mayúsculas (ej. USD, EUR, MXN).',
   'dash.settings.dropOff': 'Entrega en tienda física',
   'dash.settings.expiry': 'Caducidad de la tarjeta de regalo (meses)',
   'dash.settings.expiryHelp': 'Deja en blanco para que no caduque nunca.',

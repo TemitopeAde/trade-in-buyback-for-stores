@@ -78,6 +78,8 @@ export const NOTIFICATION_EVENTS = {
     'cancelled',
     'approved',
     'rejected',
+    'quote_accepted',
+    'quote_declined',
     'shipped',
     'received',
     'revised_offer_accepted',
@@ -88,7 +90,7 @@ export const NOTIFICATION_EVENTS = {
     'resale_draft_failed',
     'processing_failure',
   ],
-  customer: ['submitted', 'cancellation', 'approved', 'rejected', 'received', 'revised_offer', 'revised_offer_decision', 'return_started', 'returned', 'credit_issued'],
+  customer: ['submitted', 'quote', 'quote_decision', 'cancellation', 'approved', 'rejected', 'received', 'revised_offer', 'revised_offer_decision', 'return_started', 'returned', 'credit_issued'],
 } as const;
 export type MerchantNotificationEvent = (typeof NOTIFICATION_EVENTS.merchant)[number];
 export type CustomerNotificationEvent = (typeof NOTIFICATION_EVENTS.customer)[number];
@@ -109,10 +111,18 @@ export const settingsSchema = z.object({
     minimumCreditMinor: minor.default(0),
     sendGiftCardEmail: z.boolean().default(true),
   }),
-  termsText: plainText(5000).default(''),
+  // Sanitized HTML from the dashboard editor; the app takes no trade-ins until it has visible text.
+  termsHtml: z.string().max(50_000).default(''),
   mediaRetentionDays: z.int().min(1).max(365).default(30),
   revisedOfferExpiryDays: z.int().min(1).max(60).default(14),
   allowCustomerCancel: z.boolean().default(true),
+  // Items not in the catalog: the customer describes them and the merchant quotes an offer.
+  customItems: z
+    .object({
+      enabled: z.boolean().default(false),
+      photoMinimum: z.int().min(0).max(10).default(2),
+    })
+    .default({ enabled: false, photoMinimum: 2 }),
   notifications: z.object({
     merchant: toggles(NOTIFICATION_EVENTS.merchant, true),
     customer: toggles(NOTIFICATION_EVENTS.customer, true),
@@ -122,9 +132,6 @@ export const settingsSchema = z.object({
     replyToEmail: z.union([z.email(), z.literal('')]).default(''),
   }),
   defaultLocale: z.string().max(16).default('en'),
-  // ISO 4217 store currency, used by the dashboard to enter money in major units. Offers always
-  // use the product's own catalog currency.
-  currency: z.string().regex(/^[A-Z]{3}$/).default('USD'),
   // Published pages where the merchant placed the widgets; used for CTA navigation and email links.
   pages: z
     .object({
@@ -149,6 +156,17 @@ export function defaultSettings(): Settings {
 
 export const HANDOFF_METHODS = ['drop_off', 'ship_in'] as const;
 export type HandoffMethod = (typeof HANDOFF_METHODS)[number];
+
+// Customer's description of an item that isn't in the catalog. Display text only: the offer is
+// always quoted by staff, so the customer's own estimate never sets a value.
+export const customItemSchema = z.object({
+  name: plainText(120).min(1),
+  brand: plainText(80).optional(),
+  model: plainText(80).optional(),
+  description: plainText(2000).min(1),
+  customerEstimateMinor: minor.optional(),
+});
+export type CustomItem = z.infer<typeof customItemSchema>;
 
 export const conditionAnswersSchema = z.record(id, id);
 export type ConditionAnswers = z.infer<typeof conditionAnswersSchema>;

@@ -19,6 +19,8 @@ export interface Repo {
   /** One request for many replacements (backend handlers are limited to ~20 sub-requests). */
   bulkUpdate<T extends Doc>(collection: string, docs: T[]): Promise<void>;
   remove(collection: string, id: string): Promise<void>;
+  /** One request for many removals. */
+  bulkRemove(collection: string, ids: string[]): Promise<void>;
 }
 
 /** Thrown when a unique index rejects an insert; callers use this for atomic locks/dedupe. */

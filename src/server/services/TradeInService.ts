@@ -13,13 +13,14 @@ import type {
   SubmitResponse,
 } from '../../lib/schemas/api';
 import { CUSTOMER_ACTIONS } from '../../lib/schemas/api';
-import type { ConditionAnswers, Rule, Settings } from '../../lib/schemas/domain';
+import type { ConditionAnswers, CustomItem, Rule, Settings, VideoMode } from '../../lib/schemas/domain';
+import { hasTerms } from '../../lib/terms';
 import { COLLECTIONS } from '../collections';
 import type { RequestContext } from '../context';
 import { randomReference } from '../crypto';
 import { AppError } from '../errors';
 import { DuplicateKeyError, type Repo } from '../repo';
-import type { TradeInDoc, TradeInEventDoc } from '../types';
+import { TRADE_IN_DELETED_EVENT, type TradeInDoc, type TradeInEventDoc } from '../types';
 import { type AccessTokenService, authorizeCustomer, memberIdOf, requireSiteCaller } from './AuthorizationService';
 import type { IdempotencyService } from './IdempotencyService';
 import type { OutboxService } from './OutboxService';
@@ -53,12 +54,19 @@ type Deps = {
   idempotency: IdempotencyService;
   outbox: OutboxService;
   tokens: AccessTokenService;
+  /** The site's payment currency, for custom items (catalog items use the product's currency). */
+  siteCurrency: (instanceId: string) => Promise<string>;
   /** Plan limits (monthly requests, uploads). Omitted = unlimited. */
   plan?: PlanLimits;
   now?: () => Date;
 };
 
 const NO_MEDIA = { photoMinimum: 0, videoMode: 'off', videoMaxSeconds: 0 } as const;
+
+type ItemFields = {
+  fields: Pick<TradeInDoc, 'productId' | 'categoryId' | 'productTitle' | 'productSnapshot' | 'customItem' | 'estimatedValueMinor' | 'currency' | 'offerBreakdown'>;
+  mediaRequirements: { photoMinimum: number; videoMode: VideoMode; videoMaxSeconds: number };
+};
 
 const SHOW_HANDOFF_FROM: readonly TradeInStatus[] = ['approved', 'in_transit', 'return_pending'];
 
@@ -75,16 +83,27 @@ export class TradeInService {
   }
 
   /** False once this calendar month's request allowance is used up. */
-  private async accepting(instanceId: string, e: PlanEntitlements | undefined): Promise<boolean> {
+  /** The store takes new requests once it has published terms and while the plan allowance lasts. */
+  private async accepting(instanceId: string, e: PlanEntitlements | undefined, settings: Settings): Promise<boolean> {
+    if (!hasTerms(settings.termsHtml)) return false;
     if (!e || e.maxRequestsPerMonth === Infinity) return true;
-    const used = await this.d.repo.count(COLLECTIONS.tradeIns, { instanceId, _createdDate: { $gte: monthStart(this.now()) } });
-    return used < e.maxRequestsPerMonth;
+    return (await this.usedThisMonth(instanceId)) < e.maxRequestsPerMonth;
+  }
+
+  /** Requests created this month, including ones the merchant has since deleted. */
+  private async usedThisMonth(instanceId: string): Promise<number> {
+    const since = { $gte: monthStart(this.now()) };
+    const [live, deleted] = await Promise.all([
+      this.d.repo.count(COLLECTIONS.tradeIns, { instanceId, _createdDate: since }),
+      this.d.repo.count(COLLECTIONS.events, { instanceId, eventType: TRADE_IN_DELETED_EVENT, _createdDate: since }),
+    ]);
+    return live + deleted;
   }
 
   /** Requests used this month and the plan allowance (null = unlimited), for the dashboard. */
   async monthlyUsage(instanceId: string): Promise<{ used: number; limit: number | null }> {
     const e = await this.limits(instanceId);
-    const used = await this.d.repo.count(COLLECTIONS.tradeIns, { instanceId, _createdDate: { $gte: monthStart(this.now()) } });
+    const used = await this.usedThisMonth(instanceId);
     return { used, limit: !e || e.maxRequestsPerMonth === Infinity ? null : e.maxRequestsPerMonth };
   }
 
@@ -129,11 +148,11 @@ export class TradeInService {
     const settings = await this.d.settings.get(ctx.instanceId);
     const handoffMethods = publicHandoff(settings);
     const e = await this.limits(ctx.instanceId);
-    const accepting = await this.accepting(ctx.instanceId, e);
+    const accepting = await this.accepting(ctx.instanceId, e, settings);
     const uploads = !e || e.mediaUploads;
     const found = await this.productAndRule(ctx.instanceId, productId);
     const statusPageUrl = settings.pages.statusPageUrl || undefined;
-    if (!found) return { eligible: false, accepting, uploads, questions: [], media: { ...NO_MEDIA }, handoffMethods, termsText: settings.termsText, statusPageUrl };
+    if (!found) return { eligible: false, accepting, uploads, questions: [], media: { ...NO_MEDIA }, handoffMethods, termsHtml: settings.termsHtml, statusPageUrl };
     const { product, rule } = found;
     return {
       eligible: true,
@@ -146,10 +165,30 @@ export class TradeInService {
       })),
       media: uploads ? { photoMinimum: rule.photoMinimum, videoMode: rule.videoMode, videoMaxSeconds: rule.videoMaxSeconds } : { ...NO_MEDIA },
       handoffMethods,
-      termsText: settings.termsText,
+      termsHtml: settings.termsHtml,
       upToMinor: maximumPossibleOffer(rule, product.priceMinor),
       currency: product.currency,
       statusPageUrl,
+    };
+  }
+
+  /** Form config for describing a custom item; not eligible unless the store enabled custom items. */
+  async customItemConfig(ctx: RequestContext): Promise<FormConfig> {
+    requireSiteCaller(ctx);
+    const settings = await this.d.settings.get(ctx.instanceId);
+    const e = await this.limits(ctx.instanceId);
+    const uploads = !e || e.mediaUploads;
+    return {
+      eligible: settings.customItems.enabled,
+      accepting: await this.accepting(ctx.instanceId, e, settings),
+      uploads,
+      questions: [],
+      media: uploads ? customItemMedia(settings) : { ...NO_MEDIA },
+      handoffMethods: publicHandoff(settings),
+      termsHtml: settings.termsHtml,
+      currency: await this.d.siteCurrency(ctx.instanceId),
+      statusPageUrl: settings.pages.statusPageUrl || undefined,
+      custom: true,
     };
   }
 
@@ -166,9 +205,11 @@ export class TradeInService {
   async productCta(ctx: RequestContext, productId: string): Promise<ProductCtaResponse> {
     const found = await this.productAndRule(ctx.instanceId, productId);
     if (!found) return { eligible: false };
-    // No button while the store can't take new requests this month.
-    if (!(await this.accepting(ctx.instanceId, await this.limits(ctx.instanceId)))) return { eligible: false };
-    const { pages } = await this.d.settings.get(ctx.instanceId);
+    // While the store can't take new requests this month the widget shows a disabled button.
+    // `eligible` stays false so nothing can open the form.
+    const settings = await this.d.settings.get(ctx.instanceId);
+    if (!(await this.accepting(ctx.instanceId, await this.limits(ctx.instanceId), settings))) return { eligible: false, accepting: false };
+    const { pages } = settings;
     return {
       eligible: true,
       upToMinor: maximumPossibleOffer(found.rule, found.product.priceMinor),
@@ -196,11 +237,69 @@ export class TradeInService {
     const e = await this.limits(ctx.instanceId);
     // Checked inside the idempotent run, so replaying an accepted submission still succeeds.
     // Two simultaneous last submissions can both pass; the cap is a plan limit, not a hard quota.
-    if (!(await this.accepting(ctx.instanceId, e))) throw new AppError('bad_request', 'monthly request limit reached', { form: 'not_accepting' });
+    if (!hasTerms(settings.termsHtml)) throw new AppError('bad_request', 'store has no trade-in terms', { form: 'not_accepting' });
+    if (!(await this.accepting(ctx.instanceId, e, settings))) throw new AppError('bad_request', 'monthly request limit reached', { form: 'not_accepting' });
     if (!publicHandoff(settings).some((h) => h.method === input.handoffMethod)) {
       throw new AppError('bad_request', 'handoff disabled', { handoffMethod: 'disabled' });
     }
-    const found = await this.productAndRule(ctx.instanceId, input.productId);
+    const uploads = !e || e.mediaUploads;
+    if (!uploads && input.mediaIds.length) throw new AppError('bad_request', 'uploads not available', { media: 'not_available' });
+    const item = input.customItem ? customItemFields(input.customItem, settings, await this.d.siteCurrency(ctx.instanceId)) : await this.catalogItemFields(ctx, input, memberId, settings);
+    const mediaRequirements = uploads ? item.mediaRequirements : { ...NO_MEDIA };
+    const media = await this.d.media.validateForSubmission(ctx.instanceId, input.uploadSessionId, input.mediaIds, mediaRequirements);
+
+    let doc: TradeInDoc | undefined;
+    for (let attempt = 0; attempt < 5 && !doc; attempt++) {
+      try {
+        doc = await this.d.repo.insert<TradeInDoc>(COLLECTIONS.tradeIns, {
+          instanceId: ctx.instanceId,
+          reference: randomReference(),
+          memberId,
+          customerEmail: input.contact.email.toLowerCase(),
+          customerName: input.contact.name,
+          customerPhone: input.contact.phone || undefined,
+          ...item.fields,
+          orderId: input.customItem ? undefined : input.orderId,
+          conditionAnswers: input.customItem ? {} : input.answers,
+          offerCalculationVersion: OFFER_CALCULATION_VERSION,
+          status: 'submitted',
+          revision: 1,
+          handoffMethod: input.handoffMethod,
+          internalNotes: [],
+          giftCardStatus: 'not_started',
+          resaleDraftStatus: 'not_started',
+          submissionKey: input.submissionKey,
+          locale: input.locale,
+          mediaRequirements,
+          // What the customer agreed to, kept even if the store edits its terms later.
+          termsHtml: settings.termsHtml,
+          termsAcceptedAt: this.now(),
+        });
+      } catch (err) {
+        if (!(err instanceof DuplicateKeyError)) throw err; // reference collision: retry with a new one
+      }
+    }
+    if (!doc) throw new AppError('internal', 'could not allocate reference');
+
+    await this.d.media.attach(media, doc._id);
+    await this.d.lifecycle.recordEvent({
+      instanceId: ctx.instanceId, tradeInId: doc._id, eventType: 'submitted', toStatus: 'submitted',
+      actorType: 'customer', actorId: memberId, idempotencyKey: input.submissionKey,
+      metadataSanitized: {
+        photos: media.filter((m) => m.mediaType === 'photo').length, videos: media.filter((m) => m.mediaType === 'video').length,
+        ...(input.customItem ? { customItem: true } : {}),
+      },
+    });
+    await this.d.outbox.enqueue({
+      instanceId: ctx.instanceId, eventType: 'trade_in.submitted', tradeInId: doc._id,
+      payload: { reference: doc.reference }, dedupeKey: `submitted:${doc._id}`,
+    });
+    return { tradeInId: doc._id, reference: doc.reference };
+  }
+
+  /** Catalog product: re-read price and rule, verify the order, compute the offer. */
+  private async catalogItemFields(ctx: RequestContext, input: SubmitRequest, memberId: string | undefined, settings: Settings): Promise<ItemFields> {
+    const found = input.productId ? await this.productAndRule(ctx.instanceId, input.productId) : undefined;
     if (!found) throw new AppError('bad_request', 'not eligible', { productId: 'not_eligible' });
     const { product, rule } = found;
 
@@ -215,62 +314,21 @@ export class TradeInService {
     if (offer.breakdown.offerMinor < settings.credit.minimumCreditMinor || offer.breakdown.offerMinor <= 0) {
       throw new AppError('bad_request', 'below minimum credit', { answers: 'below_minimum' });
     }
-
-    const uploads = !e || e.mediaUploads;
-    if (!uploads && input.mediaIds.length) throw new AppError('bad_request', 'uploads not available', { media: 'not_available' });
-    const mediaRequirements = uploads ? { photoMinimum: rule.photoMinimum, videoMode: rule.videoMode, videoMaxSeconds: rule.videoMaxSeconds } : { ...NO_MEDIA };
-    const media = await this.d.media.validateForSubmission(ctx.instanceId, input.uploadSessionId, input.mediaIds, mediaRequirements);
-
-    let doc: TradeInDoc | undefined;
-    for (let attempt = 0; attempt < 5 && !doc; attempt++) {
-      try {
-        doc = await this.d.repo.insert<TradeInDoc>(COLLECTIONS.tradeIns, {
-          instanceId: ctx.instanceId,
-          reference: randomReference(),
-          memberId,
-          customerEmail: input.contact.email.toLowerCase(),
-          customerName: input.contact.name,
-          customerPhone: input.contact.phone || undefined,
-          productId: product.productId,
-          orderId: input.orderId,
-          categoryId: product.categoryIds[0],
-          productTitle: product.title,
-          productSnapshot: {
-            title: product.title, imageUrl: product.imageUrl, sku: product.sku, priceMinor: product.priceMinor,
-            currency: product.currency, catalogVersion: product.catalogVersion, categoryIds: product.categoryIds,
-          },
-          conditionAnswers: input.answers,
-          estimatedValueMinor: offer.breakdown.offerMinor,
-          currency: product.currency,
-          offerCalculationVersion: OFFER_CALCULATION_VERSION,
-          offerBreakdown: offer.breakdown,
-          status: 'submitted',
-          revision: 1,
-          handoffMethod: input.handoffMethod,
-          internalNotes: [],
-          giftCardStatus: 'not_started',
-          resaleDraftStatus: 'not_started',
-          submissionKey: input.submissionKey,
-          locale: input.locale,
-          mediaRequirements,
-        });
-      } catch (err) {
-        if (!(err instanceof DuplicateKeyError)) throw err; // reference collision: retry with a new one
-      }
-    }
-    if (!doc) throw new AppError('internal', 'could not allocate reference');
-
-    await this.d.media.attach(media, doc._id);
-    await this.d.lifecycle.recordEvent({
-      instanceId: ctx.instanceId, tradeInId: doc._id, eventType: 'submitted', toStatus: 'submitted',
-      actorType: 'customer', actorId: memberId, idempotencyKey: input.submissionKey,
-      metadataSanitized: { photos: media.filter((m) => m.mediaType === 'photo').length, videos: media.filter((m) => m.mediaType === 'video').length },
-    });
-    await this.d.outbox.enqueue({
-      instanceId: ctx.instanceId, eventType: 'trade_in.submitted', tradeInId: doc._id,
-      payload: { reference: doc.reference }, dedupeKey: `submitted:${doc._id}`,
-    });
-    return { tradeInId: doc._id, reference: doc.reference };
+    return {
+      fields: {
+        productId: product.productId,
+        categoryId: product.categoryIds[0],
+        productTitle: product.title,
+        productSnapshot: {
+          title: product.title, imageUrl: product.imageUrl, sku: product.sku, priceMinor: product.priceMinor,
+          currency: product.currency, catalogVersion: product.catalogVersion, categoryIds: product.categoryIds,
+        },
+        estimatedValueMinor: offer.breakdown.offerMinor,
+        currency: product.currency,
+        offerBreakdown: offer.breakdown,
+      },
+      mediaRequirements: { photoMinimum: rule.photoMinimum, videoMode: rule.videoMode, videoMaxSeconds: rule.videoMaxSeconds },
+    };
   }
 
   // ---- Customer status & actions ------------------------------------------------------
@@ -285,13 +343,17 @@ export class TradeInService {
     return { doc: await this.expireRevisedOfferIfDue(doc), actor };
   }
 
-  /** Revised offers expire lazily: the first read after the deadline declines on the customer's behalf. */
+  /** Quotes and revised offers expire lazily: the first read after the deadline declines on the customer's behalf. */
   private async expireRevisedOfferIfDue(doc: TradeInDoc): Promise<TradeInDoc> {
-    if (doc.status !== 'revised_offer_pending' || !doc.revisedOfferExpiresAt || new Date(doc.revisedOfferExpiresAt) > this.now()) return doc;
+    const pending =
+      doc.status === 'revised_offer_pending' ? { at: doc.revisedOfferExpiresAt, action: 'decline_revised_offer' as const, reason: 'revised_offer_expired' }
+        : doc.status === 'quote_pending' ? { at: doc.quoteExpiresAt, action: 'decline_quote' as const, reason: 'quote_expired' }
+          : undefined;
+    if (!pending?.at || new Date(pending.at) > this.now()) return doc;
     try {
       return await this.d.lifecycle.transition({
-        instanceId: doc.instanceId, tradeInId: doc._id, action: 'decline_revised_offer', actor: { type: 'system' },
-        expectedRevision: doc.revision, reason: 'revised_offer_expired',
+        instanceId: doc.instanceId, tradeInId: doc._id, action: pending.action, actor: { type: 'system' },
+        expectedRevision: doc.revision, reason: pending.reason,
       });
     } catch (err) {
       if (err instanceof AppError && err.code === 'conflict') return this.d.lifecycle.load(doc.instanceId, doc._id);
@@ -314,6 +376,7 @@ export class TradeInService {
     if (input.action === 'cancel' && !settings.allowCustomerCancel) throw new AppError('forbidden', 'cancellation disabled');
     if (input.action === 'mark_in_transit' && doc.handoffMethod !== 'ship_in') throw new AppError('invalid_transition', 'not ship-in');
     if (input.action === 'accept_revised_offer' && doc.revisedValueMinor === undefined) throw new AppError('invalid_transition', 'no revised offer');
+    if (input.action === 'accept_quote' && doc.quotedValueMinor === undefined) throw new AppError('invalid_transition', 'no quote');
 
     await this.d.lifecycle.transition({
       instanceId: ctx.instanceId,
@@ -325,7 +388,9 @@ export class TradeInService {
       patch:
         input.action === 'mark_in_transit' && input.trackingNumber && settings.handoff.shipIn.allowTracking
           ? { trackingNumber: input.trackingNumber }
-          : input.action === 'accept_revised_offer'
+          : input.action === 'accept_quote'
+            ? { estimatedValueMinor: doc.quotedValueMinor }
+            : input.action === 'accept_revised_offer'
             ? { finalValueMinor: doc.revisedValueMinor }
             : input.action === 'decline_revised_offer'
               ? { returnStatus: 'pending' }
@@ -347,10 +412,31 @@ export class TradeInService {
     );
     const items = res.items.slice(0, pageSize).map((d) => ({
       tradeInId: d._id, reference: d.reference, status: d.status, productTitle: d.productTitle,
-      createdAt: toIso(d._createdDate), estimatedValueMinor: d.estimatedValueMinor, currency: d.currency,
+      createdAt: toIso(d._createdDate), estimatedValueMinor: d.estimatedValueMinor, currency: d.currency, custom: !!d.customItem,
     }));
     return { items, nextCursor: res.items.length > pageSize ? cursor + pageSize : undefined, signedIn: true, ...links };
   }
+}
+
+function customItemMedia(settings: Settings) {
+  return { photoMinimum: settings.customItems.photoMinimum, videoMode: 'off' as const, videoMaxSeconds: 0 };
+}
+
+/** Custom item: no product, price or offer. Staff quote a value once they've reviewed it. */
+function customItemFields(customItem: CustomItem, settings: Settings, currency: string): ItemFields {
+  if (!settings.customItems.enabled) throw new AppError('bad_request', 'custom items disabled', { customItem: 'disabled' });
+  const title = [customItem.brand, customItem.name, customItem.model].filter(Boolean).join(' ').slice(0, 200);
+  return {
+    fields: {
+      productId: '',
+      productTitle: title,
+      productSnapshot: { title, priceMinor: 0, currency, categoryIds: [] },
+      customItem,
+      estimatedValueMinor: 0,
+      currency,
+    },
+    mediaRequirements: customItemMedia(settings),
+  };
 }
 
 function publicHandoff(settings: Settings): FormConfig['handoffMethods'] {
@@ -381,9 +467,14 @@ export function toCustomerView(doc: TradeInDoc, events: TradeInEventDoc[], setti
     revision: doc.revision,
     createdAt: toIso(doc._createdDate),
     product: { title: doc.productTitle, imageUrl: doc.productSnapshot?.imageUrl },
+    custom: !!doc.customItem,
     currency: doc.currency,
     estimatedValueMinor: doc.estimatedValueMinor,
     finalValueMinor: doc.finalValueMinor,
+    quote:
+      doc.status === 'quote_pending' && doc.quotedValueMinor !== undefined
+        ? { amountMinor: doc.quotedValueMinor, expiresAt: doc.quoteExpiresAt ? toIso(doc.quoteExpiresAt) : undefined }
+        : undefined,
     revisedOffer:
       doc.revisedValueMinor !== undefined
         ? { amountMinor: doc.revisedValueMinor, reason: doc.revisedOfferReason, expiresAt: doc.revisedOfferExpiresAt ? toIso(doc.revisedOfferExpiresAt) : undefined }

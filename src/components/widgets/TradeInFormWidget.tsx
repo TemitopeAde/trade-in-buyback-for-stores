@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { MessageKey } from '../../lib/i18n';
 import { toPublicMediaUrl } from '../../lib/media';
-import { formatMoney } from '../../lib/money';
+import { formatMoney, toMinor } from '../../lib/money';
 import type { CatalogItem, EstimateResponse, FormConfig, SubmitResponse } from '../../lib/schemas/api';
-import type { ConditionAnswers, HandoffMethod } from '../../lib/schemas/domain';
+import type { ConditionAnswers, CustomItem, HandoffMethod } from '../../lib/schemas/domain';
 import { ApiClientError, errorMessageKey, widgetApi } from './shared/api';
 import { ConditionQuestionGroup } from './shared/ConditionQuestionGroup';
 import { currentMemberEmail, newIdempotencyKey, readQueryParam, useSiteEnv } from './shared/env';
@@ -32,6 +32,7 @@ export function TradeInFormWidget({ styleConfig, catalogLayout, embedded, design
     <WidgetThemeProvider
       styleConfig={styleConfig}
       locale={env.locale}
+      currency={env.currency}
       isEditor={isEditor}
       as={embedded ? 'div' : 'section'}
       hostHeader={embedded}
@@ -45,9 +46,12 @@ export function TradeInFormWidget({ styleConfig, catalogLayout, embedded, design
 // ---- State -------------------------------------------------------------------------
 
 type Contact = { name: string; email: string; phone: string };
+/** What the customer typed about an item that isn't in the catalog. */
+type CustomDraft = { name: string; brand: string; model: string; description: string; estimate: string };
 type State = {
   step: number;
   item?: CatalogItem;
+  custom?: CustomDraft;
   config?: FormConfig;
   configLoading: boolean;
   answers: ConditionAnswers;
@@ -57,6 +61,9 @@ type State = {
 };
 type Action =
   | { type: 'select'; item: CatalogItem }
+  | { type: 'start_custom' }
+  | { type: 'custom_field'; field: keyof CustomDraft; value: string }
+  | { type: 'cancel_custom' }
   | { type: 'enrich_item'; item: Partial<CatalogItem> }
   | { type: 'config'; config?: FormConfig; loading: boolean }
   | { type: 'answer'; questionId: string; optionId: string }
@@ -73,7 +80,14 @@ function reducer(state: State, action: Action): State {
   switch (action.type) {
     case 'select':
       // A different product invalidates answers (questions differ per rule); other input is kept.
-      return { ...state, item: action.item, answers: state.item?.productId === action.item.productId ? state.answers : {}, config: undefined };
+      return { ...state, item: action.item, custom: undefined, answers: state.item?.productId === action.item.productId ? state.answers : {}, config: undefined };
+    case 'start_custom':
+      // Custom items have no product or condition questions; their config (sent next) comes from store settings.
+      return { ...state, item: undefined, answers: {}, config: undefined, custom: state.custom ?? { name: '', brand: '', model: '', description: '', estimate: '' } };
+    case 'custom_field':
+      return state.custom ? { ...state, custom: { ...state.custom, [action.field]: action.value } } : state;
+    case 'cancel_custom':
+      return { ...state, custom: undefined, config: undefined };
     case 'enrich_item':
       return { ...state, item: state.item ? { ...state.item, ...action.item } : undefined };
     case 'config': {
@@ -107,12 +121,10 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export function FormFlow({
   initialProductId,
   onClose,
-  isModal = false,
   catalogLayout,
 }: {
   initialProductId?: string;
   onClose?: () => void;
-  isModal?: boolean;
   catalogLayout?: 'grid' | 'table';
 } = {}) {
   const { t, style, locale } = useWidget();
@@ -131,11 +143,15 @@ export function FormFlow({
   const uploads = useUploads(state.config?.media.videoMaxSeconds ?? 60);
 
   const steps = [t('form.step.item'), t('form.step.condition'), t('form.step.evidence'), t('form.step.offer')];
-  // Without uploads on the store's plan the evidence step (index 2) is skipped; step numbers stay
-  // the same internally and only the stepper shows three steps.
+  // Step numbers stay the same internally; skipped steps are only left out of the stepper and
+  // navigation. Without uploads on the store's plan there is no evidence step (2), and a custom
+  // item has no condition questions (1).
+  const isCustom = !!state.custom;
   const skipEvidence = state.config?.uploads === false;
-  const shownSteps = skipEvidence ? steps.filter((_, i) => i !== 2) : steps;
-  const shownCurrent = skipEvidence && state.step > 2 ? state.step - 1 : state.step;
+  const visibleSteps = [0, 1, 2, 3].filter((i) => !(i === 1 && isCustom) && !(i === 2 && skipEvidence));
+  const shownSteps = visibleSteps.map((i) => steps[i]);
+  const shownCurrent = Math.max(0, visibleSteps.indexOf(state.step));
+  const [customConfig, setCustomConfig] = useState<FormConfig>();
 
   // Prefill from initialProductId or ?product= (e.g. from the product page CTA). Still verified by the server.
   useEffect(() => {
@@ -153,6 +169,17 @@ export function FormFlow({
       alive = false;
     };
   }, []);
+
+  // Whether the store takes items that aren't in the catalog; the link only shows when it does.
+  useEffect(() => {
+    widgetApi.customItemConfig().then(setCustomConfig, () => setCustomConfig(undefined));
+  }, []);
+  const startCustom = () => {
+    if (!customConfig) return;
+    setIssues([]);
+    dispatch({ type: 'start_custom' });
+    dispatch({ type: 'config', config: customConfig, loading: false });
+  };
 
   const productId = state.item?.productId;
   const loadConfig = () => {
@@ -202,7 +229,14 @@ export function FormFlow({
 
   const validateStep = (step: number): Issue[] => {
     const out: Issue[] = [];
-    if (step === 0) {
+    if (step === 0 && state.custom) {
+      const c = state.custom;
+      if (!c.name.trim()) out.push({ key: 'validation.required', vars: { field: t('form.custom.name') }, field: 'customName' });
+      if (!c.description.trim()) out.push({ key: 'validation.required', vars: { field: t('form.custom.description') }, field: 'customDescription' });
+      if (c.estimate.trim() && parseEstimate(c.estimate, config?.currency) === undefined) out.push({ key: 'validation.amount', field: 'customEstimate' });
+      if (!config?.eligible) out.push({ key: 'form.custom.unavailable' });
+      else if (config.accepting === false) out.push({ key: 'form.notAccepting' });
+    } else if (step === 0) {
       if (!state.item || !config) out.push({ key: 'validation.selectItem' });
       else if (!config.eligible) out.push({ key: 'form.item.notEligible' });
       else if (config.accepting === false) out.push({ key: 'form.notAccepting' });
@@ -237,25 +271,27 @@ export function FormFlow({
   const next = () => {
     const found = validateStep(state.step);
     showIssues(found);
-    if (!found.length) dispatch({ type: 'step', step: skipEvidence && state.step === 1 ? 3 : state.step + 1 });
+    const at = visibleSteps.indexOf(state.step);
+    if (!found.length) dispatch({ type: 'step', step: visibleSteps[Math.min(at + 1, visibleSteps.length - 1)] });
   };
   const back = () => {
     setIssues([]);
-    dispatch({ type: 'step', step: skipEvidence && state.step === 3 ? 1 : Math.max(0, state.step - 1) });
+    const at = visibleSteps.indexOf(state.step);
+    dispatch({ type: 'step', step: visibleSteps[Math.max(0, at - 1)] });
   };
 
   const submit = async () => {
     const found = [0, 1, 2, 3].flatMap(validateStep);
     showIssues(found);
-    if (found.length || !state.item || !state.handoff || submitting) return;
+    if (found.length || (!state.item && !state.custom) || !state.handoff || submitting) return;
     setSubmitting(true);
     setSubmitError(undefined);
     try {
       const res = await widgetApi.submit({
         submissionKey: submissionKey.current,
-        productId: state.item.productId,
-        orderId: state.item.orderId,
-        answers: state.answers,
+        ...(state.custom
+          ? { customItem: toCustomItem(state.custom, config?.currency), answers: {} }
+          : { productId: state.item?.productId, orderId: state.item?.orderId, answers: state.answers }),
         uploadSessionId: uploads.uploadSessionId(),
         mediaIds: uploads.items.filter(usable).map((i) => i.mediaId!).filter(Boolean),
         handoffMethod: state.handoff,
@@ -297,12 +333,22 @@ export function FormFlow({
         <div className="ti-stack">
           <h3 ref={headingRef} tabIndex={-1} className="ti-subheading" style={{ outline: 'none' }}>{steps[state.step]}</h3>
 
-          {state.step === 0 && (
+          {state.step === 0 && state.custom && (
+            <CustomItemFields
+              draft={state.custom}
+              currency={config?.currency}
+              error={fieldError}
+              onChange={(field, value) => dispatch({ type: 'custom_field', field, value })}
+              onCancel={() => { setIssues([]); dispatch({ type: 'cancel_custom' }); }}
+            />
+          )}
+
+          {state.step === 0 && !state.custom && (
             <>
               <ProductPicker
                 selected={state.item}
                 onSelect={(item) => dispatch({ type: 'select', item })}
-                layout={catalogLayout ?? (isModal ? 'table' : 'grid')}
+                layout={catalogLayout ?? 'table'}
               />
               {state.configLoading && <Loading />}
               {configError && <TradeInErrorState message={configError} onRetry={loadConfig} />}
@@ -313,12 +359,18 @@ export function FormFlow({
                   {t('form.item.selected')}: <strong>{config.product.title}</strong>
                 </p>
               )}
+              {customConfig?.eligible && customConfig.accepting && (
+                <div className="ti-custom-cta">
+                  <span className="ti-helper">{t('form.custom.prompt')}</span>
+                  <WidgetButton variant="secondary" onClick={startCustom}>{t('form.custom.start')}</WidgetButton>
+                </div>
+              )}
             </>
           )}
 
-          {state.step > 0 && config?.product && (
+          {state.step > 0 && (config?.product || state.custom) && (
             <div className="ti-selected-item-banner">
-              {toPublicMediaUrl(config.product.imageUrl) ? (
+              {config?.product && toPublicMediaUrl(config.product.imageUrl) ? (
                 <img
                   className="ti-selected-item-banner__image"
                   src={toPublicMediaUrl(config.product.imageUrl)}
@@ -328,7 +380,7 @@ export function FormFlow({
               ) : null}
               <div className="ti-selected-item-banner__info">
                 <span className="ti-selected-item-banner__label">{t('form.item.selected')}</span>
-                <strong className="ti-selected-item-banner__title">{config.product.title}</strong>
+                <strong className="ti-selected-item-banner__title">{config?.product?.title ?? customTitle(state.custom!)}</strong>
               </div>
             </div>
           )}
@@ -367,7 +419,11 @@ export function FormFlow({
 
           {state.step === 3 && config && (
             <>
-              <OfferSummary amountMinor={estimate?.eligible ? estimate.offerMinor : undefined} currency={estimate?.eligible ? estimate.currency : undefined} unavailable={estimate?.eligible === false} />
+              {state.custom ? (
+                <Alert tone="info">{t('form.custom.offerPending')}</Alert>
+              ) : (
+                <OfferSummary amountMinor={estimate?.eligible ? estimate.offerMinor : undefined} currency={estimate?.eligible ? estimate.currency : undefined} unavailable={estimate?.eligible === false} />
+              )}
               <HandoffMethodSelector methods={config.handoffMethods} value={state.handoff} error={fieldError('handoff')} onChange={(value) => dispatch({ type: 'handoff', value })} />
               <div className="ti-fields">
                 <WidgetField label={t('form.contact.name')} required error={fieldError('name')}>
@@ -382,7 +438,7 @@ export function FormFlow({
                   </WidgetField>
                 )}
               </div>
-              <TermsField text={config.termsText} checked={state.acceptTerms} error={fieldError('terms')} onChange={(value) => dispatch({ type: 'terms', value })} />
+              <TermsField html={config.termsHtml} checked={state.acceptTerms} error={fieldError('terms')} onChange={(value) => dispatch({ type: 'terms', value })} />
               {submitError && <Alert tone="error">{submitError}</Alert>}
             </>
           )}
@@ -410,24 +466,89 @@ function submitErrorKey(err: unknown): MessageKey {
     if (f.answers) return 'form.offer.unavailable';
     if (f.handoffMethod) return 'validation.handoff';
     if (f.form === 'not_accepting') return 'form.notAccepting';
+    if (f.customItem) return 'form.custom.unavailable';
   }
   return errorMessageKey(err);
 }
 
-function TermsField({ text, checked, error, onChange }: { text: string; checked: boolean; error?: string; onChange: (v: boolean) => void }) {
+function customTitle(c: CustomDraft): string {
+  return [c.brand, c.name, c.model].map((s) => s.trim()).filter(Boolean).join(' ');
+}
+
+/** Major-unit text ("25" or "25.50") to minor units; undefined when it isn't a valid amount. */
+function parseEstimate(value: string, currency: string | undefined): number | undefined {
+  const v = value.trim().replace(',', '.');
+  if (!currency) return undefined;
+  if (!/^\d{1,9}(\.\d{1,3})?$/.test(v)) return undefined;
+  try {
+    return toMinor(v, currency);
+  } catch {
+    return undefined;
+  }
+}
+
+function toCustomItem(c: CustomDraft, currency?: string): CustomItem {
+  return {
+    name: c.name.trim(),
+    brand: c.brand.trim() || undefined,
+    model: c.model.trim() || undefined,
+    description: c.description.trim(),
+    customerEstimateMinor: c.estimate.trim() ? parseEstimate(c.estimate, currency) : undefined,
+  };
+}
+
+function CustomItemFields({ draft, currency, error, onChange, onCancel }: {
+  draft: CustomDraft;
+  currency?: string;
+  error: (field: string) => string | undefined;
+  onChange: (field: keyof CustomDraft, value: string) => void;
+  onCancel: () => void;
+}) {
+  const { t } = useWidget();
+  return (
+    <div className="ti-stack">
+      <p className="ti-helper" style={{ margin: 0 }}>{t('form.custom.intro')}</p>
+      <div className="ti-fields">
+        <WidgetField label={t('form.custom.name')} required error={error('customName')}>
+          {(a11y) => <input {...a11y} className="ti-input" value={draft.name} maxLength={120} placeholder={t('form.custom.namePlaceholder')} onChange={(e) => onChange('name', e.target.value)} />}
+        </WidgetField>
+        <div className="ti-custom-row">
+          <WidgetField label={t('form.custom.brand')}>
+            {(a11y) => <input {...a11y} className="ti-input" value={draft.brand} maxLength={80} onChange={(e) => onChange('brand', e.target.value)} />}
+          </WidgetField>
+          <WidgetField label={t('form.custom.model')}>
+            {(a11y) => <input {...a11y} className="ti-input" value={draft.model} maxLength={80} onChange={(e) => onChange('model', e.target.value)} />}
+          </WidgetField>
+        </div>
+        <WidgetField label={t('form.custom.description')} required help={t('form.custom.descriptionHelp')} error={error('customDescription')}>
+          {(a11y) => <textarea {...a11y} className="ti-textarea" rows={5} value={draft.description} maxLength={2000} onChange={(e) => onChange('description', e.target.value)} />}
+        </WidgetField>
+        <WidgetField label={t('form.custom.estimate', { currency: currency ?? '' })} help={t('form.custom.estimateHelp')} error={error('customEstimate')}>
+          {(a11y) => <input {...a11y} className="ti-input" inputMode="decimal" value={draft.estimate} maxLength={14} onChange={(e) => onChange('estimate', e.target.value)} />}
+        </WidgetField>
+      </div>
+      <div>
+        <button type="button" className="ti-button ti-button--link" onClick={onCancel}>{t('form.custom.backToCatalog')}</button>
+      </div>
+    </div>
+  );
+}
+
+function TermsField({ html, checked, error, onChange }: { html: string; checked: boolean; error?: string; onChange: (v: boolean) => void }) {
   const { t } = useWidget();
   // Legal terms are never hidden by appearance settings.
   return (
     <div className="ti-fields" style={{ gap: 6 }}>
-      {text && (
+      {html && (
         <details>
-          <summary className="ti-button ti-button--link">{t('form.terms.show')}</summary>
-          <p className="ti-helper" style={{ whiteSpace: 'pre-wrap' }}>{text}</p>
+          <summary className="ti-button ti-button--link" style={{ paddingInline: 0 }}>{t('form.terms.show')}</summary>
+          {/* Sanitized by the server when the merchant saves it. */}
+          <div className="ti-terms" dangerouslySetInnerHTML={{ __html: html }} />
         </details>
       )}
-      <label className="ti-choice">
+      <label className="ti-check">
         <input type="checkbox" checked={checked} required aria-invalid={error ? true : undefined} aria-describedby={error ? 'ti-terms-error' : undefined} onChange={(e) => onChange(e.target.checked)} />
-        <span className="ti-choice__body">{t('form.terms.accept')}<span className="ti-required" aria-hidden="true">*</span></span>
+        <span>{t('form.terms.accept')}<span className="ti-required" aria-hidden="true">*</span></span>
       </label>
       {error && <p id="ti-terms-error" className="ti-field-error">{error}</p>}
     </div>
@@ -468,7 +589,7 @@ function SubmissionSuccess({ result, statusPageUrl, onAnother }: { result: Submi
 
 /** Editor-only preview: shows every styled element with neutral sample content, no data calls. */
 export function FormEditorPreview() {
-  const { t, style, locale } = useWidget();
+  const { t, style, locale, currency } = useWidget();
   const steps = [t('form.step.item'), t('form.step.condition'), t('form.step.evidence'), t('form.step.offer')];
   return (
     <div className="ti-stack">
@@ -487,10 +608,12 @@ export function FormEditorPreview() {
           <WidgetField label={t('form.contact.email')} required help={t('form.contact.emailHelp')}>
             {(a11y) => <input {...a11y} className="ti-input" readOnly value="" />}
           </WidgetField>
-          <div className="ti-offer">
-            <span className="ti-label">{t('form.offer.estimate')}</span>
-            <span className="ti-offer__amount">{formatMoney(12000, 'USD', locale)}</span>
-          </div>
+          {currency && (
+            <div className="ti-offer">
+              <span className="ti-label">{t('form.offer.estimate')}</span>
+              <span className="ti-offer__amount">{formatMoney(12000, currency, locale)}</span>
+            </div>
+          )}
           <Alert tone="info">{t('common.editorPlaceholder')}</Alert>
           <hr className="ti-divider" />
           <div className="ti-row ti-row--between">

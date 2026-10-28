@@ -6,6 +6,7 @@ import { COLLECTIONS } from '../../src/server/collections';
 import type { RequestContext } from '../../src/server/context';
 import { AccessTokenService } from '../../src/server/services/AuthorizationService';
 import { IdempotencyService } from '../../src/server/services/IdempotencyService';
+import { MerchantService } from '../../src/server/services/MerchantService';
 import { OutboxService } from '../../src/server/services/OutboxService';
 import { RulesService } from '../../src/server/services/RulesService';
 import { SettingsService } from '../../src/server/services/SettingsService';
@@ -24,7 +25,9 @@ const SESSION = 'S'.repeat(43);
 
 const product: CatalogProduct = { productId: 'p1', title: 'Phone', priceMinor: 100_00, currency: 'USD', categoryIds: ['c1'], visible: true, catalogVersion: 'V3_CATALOG' };
 
-function setup(planTier?: PlanTier) {
+const TERMS = '<p>Final value is confirmed after inspection.</p>';
+
+async function setup(planTier?: PlanTier) {
   const repo = new MemoryRepo();
   const idempotency = new IdempotencyService(repo);
   const outbox = new OutboxService(repo);
@@ -39,13 +42,19 @@ function setup(planTier?: PlanTier) {
     repo, rules, settings, media, lifecycle, idempotency, outbox, tokens, plan,
     // The in-memory repo stamps documents in January 2026.
     now: () => new Date(Date.UTC(2026, 0, 15)),
+    siteCurrency: async () => 'USD',
     catalog: { getProduct: async (_i, id) => (id === product.productId ? product : undefined), search: async () => [product] },
     orders: {
       eligibleItemsForMember: async () => [],
       verifyMemberOrderItem: async (m, o, p) => orderOwnership.get(o) === m && p === 'p1',
     },
   });
-  return { repo, svc, rules, settings, tokens };
+  const merchant = new MerchantService({
+    repo, lifecycle, media: new TradeInMediaService(repo, { deletePermanently: async () => undefined } as unknown as WixMediaService),
+    rules, settings, catalogVersion: async () => 'V3_CATALOG', plan, now: () => new Date(Date.UTC(2026, 0, 15)),
+  });
+  await settings.save(INSTANCE, { ...defaultSettings(), termsHtml: TERMS });
+  return { repo, svc, rules, settings, tokens, merchant };
 }
 
 async function seedRule(rules: RulesService) {
@@ -70,9 +79,9 @@ const request = (over: Partial<SubmitRequest> = {}): SubmitRequest => ({
 });
 
 describe('customer submission', () => {
-  let ctx: ReturnType<typeof setup>;
+  let ctx: Awaited<ReturnType<typeof setup>>;
   beforeEach(async () => {
-    ctx = setup();
+    ctx = await setup();
     await seedRule(ctx.rules);
   });
 
@@ -81,7 +90,7 @@ describe('customer submission', () => {
     const res = await ctx.svc.submit(visitor, request({ mediaIds: [photo._id] }));
     const doc = (await ctx.repo.get<TradeInDoc>(COLLECTIONS.tradeIns, res.tradeInId))!;
     expect(doc).toMatchObject({ status: 'submitted', estimatedValueMinor: 40_00, currency: 'USD', customerEmail: 'ana@example.com', revision: 1 });
-    expect(doc.offerBreakdown.basePriceMinor).toBe(100_00);
+    expect(doc.offerBreakdown?.basePriceMinor).toBe(100_00);
     expect((await ctx.repo.get<TradeInMediaDoc>(COLLECTIONS.media, photo._id))!.tradeInId).toBe(res.tradeInId);
     expect(ctx.repo.all(COLLECTIONS.outbox).map((o) => o.eventType)).toEqual(['trade_in.submitted']);
     expect(res.reference).toMatch(/^TI-[A-Z2-9]{4}-[A-Z2-9]{4}$/);
@@ -163,9 +172,54 @@ describe('evidence upload limits', () => {
   });
 });
 
+describe('trade-in terms', () => {
+  it('takes no requests until the store has terms', async () => {
+    const ctx = await setup();
+    await seedRule(ctx.rules);
+    await ctx.settings.save(INSTANCE, { ...defaultSettings(), termsHtml: '<p><br></p>' });
+    expect((await ctx.svc.formConfig(visitor, 'p1')).accepting).toBe(false);
+    expect(await ctx.svc.productCta(visitor, 'p1')).toEqual({ eligible: false, accepting: false });
+    await expect(ctx.svc.submit(visitor, request())).rejects.toMatchObject({ fields: { form: 'not_accepting' } });
+    expect((await ctx.merchant.overview(INSTANCE)).setup.termsConfigured).toBe(false);
+
+    await ctx.settings.save(INSTANCE, { ...defaultSettings(), termsHtml: TERMS });
+    expect((await ctx.svc.formConfig(visitor, 'p1')).accepting).toBe(true);
+    expect((await ctx.merchant.overview(INSTANCE)).setup.termsConfigured).toBe(true);
+  });
+
+  it('records the terms the customer accepted, unchanged by later edits', async () => {
+    const ctx = await setup();
+    await seedRule(ctx.rules);
+    const photo = await seedPhoto(ctx.repo);
+    const { tradeInId } = await ctx.svc.submit(visitor, request({ mediaIds: [photo._id] }));
+    await ctx.settings.save(INSTANCE, { ...defaultSettings(), termsHtml: '<p>New terms</p>' });
+    const doc = (await ctx.repo.get<TradeInDoc>(COLLECTIONS.tradeIns, tradeInId))!;
+    expect(doc.termsHtml).toBe(TERMS);
+    expect(doc.termsAcceptedAt).toEqual(new Date(Date.UTC(2026, 0, 15)));
+  });
+
+  it('sanitizes terms on save and serves them to the form', async () => {
+    const ctx = await setup();
+    await seedRule(ctx.rules);
+    await ctx.settings.save(INSTANCE, { ...defaultSettings(), termsHtml: '<p onclick="x()">Hi<script>alert(1)</script></p><img src=x onerror=alert(1)><a href="javascript:alert(1)">bad</a>' });
+    const { termsHtml } = await ctx.svc.formConfig(visitor, 'p1');
+    expect(termsHtml).not.toMatch(/script|onclick|onerror|<img|javascript:/);
+    expect(termsHtml).toContain('<p>Hi</p>');
+  });
+
+  it('converts plain-text terms saved before the editor existed', async () => {
+    const ctx = await setup();
+    const repo = ctx.repo;
+    const [doc] = repo.all(COLLECTIONS.settings) as unknown as { settings: Record<string, unknown> }[];
+    const { termsHtml: _drop, ...legacy } = doc.settings;
+    await repo.update(COLLECTIONS.settings, { ...doc, settings: { ...legacy, termsText: 'Line one\n\nA < B' } } as never);
+    expect((await ctx.settings.get(INSTANCE)).termsHtml).toBe('<p>Line one</p><p>A &lt; B</p>');
+  });
+});
+
 describe('plan limits on submission', () => {
   it('takes one request a month on basic, then stops accepting', async () => {
-    const ctx = setup('basic');
+    const ctx = await setup('basic');
     await seedRule(ctx.rules);
     const config = await ctx.svc.formConfig(visitor, 'p1');
     expect(config).toMatchObject({ accepting: true, uploads: false, media: { photoMinimum: 0, videoMode: 'off' } });
@@ -174,14 +228,25 @@ describe('plan limits on submission', () => {
     await expect(ctx.svc.submit(visitor, request())).resolves.toBeTruthy();
     await expect(ctx.svc.submit(visitor, request({ submissionKey: 'submission-key-0002' }))).rejects.toMatchObject({ fields: { form: 'not_accepting' } });
     expect((await ctx.svc.formConfig(visitor, 'p1')).accepting).toBe(false);
-    expect((await ctx.svc.productCta(visitor, 'p1')).eligible).toBe(false);
+    expect(await ctx.svc.productCta(visitor, 'p1')).toEqual({ eligible: false, accepting: false });
+    expect(await ctx.svc.monthlyUsage(INSTANCE)).toEqual({ used: 1, limit: 1 });
+  });
+
+  it('still counts a deleted request toward the monthly allowance', async () => {
+    const ctx = await setup('basic');
+    await seedRule(ctx.rules);
+    const { tradeInId } = await ctx.svc.submit(visitor, request());
+    await ctx.merchant.deleteTradeIn(INSTANCE, { type: 'merchant', id: 'u1' }, tradeInId);
+    expect(await ctx.repo.get(COLLECTIONS.tradeIns, tradeInId)).toBeNull();
+    expect((await ctx.svc.formConfig(visitor, 'p1')).accepting).toBe(false);
+    expect(await ctx.svc.productCta(visitor, 'p1')).toEqual({ eligible: false, accepting: false });
     expect(await ctx.svc.monthlyUsage(INSTANCE)).toEqual({ used: 1, limit: 1 });
   });
 
   it('refuses uploaded media and ship-in on basic', async () => {
-    const ctx = setup('basic');
+    const ctx = await setup('basic');
     await seedRule(ctx.rules);
-    const st = defaultSettings();
+    const st = { ...defaultSettings(), termsHtml: TERMS };
     st.handoff.shipIn.enabled = true;
     await ctx.settings.save(INSTANCE, st);
     const photo = await seedPhoto(ctx.repo);
@@ -192,9 +257,9 @@ describe('plan limits on submission', () => {
   });
 
   it('keeps the rule photo requirement and ship-in on pro', async () => {
-    const ctx = setup('pro');
+    const ctx = await setup('pro');
     await seedRule(ctx.rules);
-    const st = defaultSettings();
+    const st = { ...defaultSettings(), termsHtml: TERMS };
     st.handoff.shipIn.enabled = true;
     await ctx.settings.save(INSTANCE, st);
     const config = await ctx.svc.formConfig(visitor, 'p1');

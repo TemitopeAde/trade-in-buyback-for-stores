@@ -332,8 +332,6 @@ export const zh: Catalog = {
   'dash.settings.allowCancel': '允许客户在发货前自行取消申请',
   'dash.settings.allowTracking': '允许客户填写快递单号',
   'dash.settings.credit': '商店信用额度',
-  'dash.settings.currency': '币种代码',
-  'dash.settings.currencyHelp': '三位大写字母货币代码（如 USD、CNY、EUR、GBP）。',
   'dash.settings.dropOff': '到店交付',
   'dash.settings.expiry': '礼品卡有效期（月）',
   'dash.settings.expiryHelp': '留空表示永不过期。',

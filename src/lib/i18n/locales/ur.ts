@@ -333,8 +333,6 @@ export const ur: Catalog = {
   'dash.settings.allowCancel': 'چیز بھیجنے سے پہلے گاہک کو منسوخی کی اجازت دیں',
   'dash.settings.allowTracking': 'گاہک کو کورئیر ٹریکنگ نمبر درج کرنے کی اجازت دیں',
   'dash.settings.credit': 'اسٹور کریڈٹ',
-  'dash.settings.currency': 'کرنسی کوڈ',
-  'dash.settings.currencyHelp': 'تین حروف کا کرنسی کوڈ (جیسے PKR, AED, USD, SAR).',
   'dash.settings.dropOff': 'اسٹور پر براہ راست جمع کروانا',
   'dash.settings.expiry': 'گفٹ کارڈ کی میعاد (ماہ)',
   'dash.settings.expiryHelp': 'لامحدود میعاد کے لیے خالی چھوڑ دیں۔',

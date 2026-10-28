@@ -8,7 +8,7 @@ import { Input } from './ui/input';
 import { useDashboard } from './context';
 
 const STATUS_VARIANT: Record<TradeInStatus, 'secondary' | 'info' | 'success' | 'warning' | 'destructive' | 'outline'> = {
-  submitted: 'info', under_review: 'info', approved: 'secondary', in_transit: 'secondary', received: 'secondary', inspection: 'warning',
+  submitted: 'info', under_review: 'info', quote_pending: 'warning', approved: 'secondary', in_transit: 'secondary', received: 'secondary', inspection: 'warning',
   revised_offer_pending: 'warning', revised_offer_accepted: 'success', revised_offer_declined: 'outline', credit_pending: 'warning',
   credit_issued: 'success', return_pending: 'outline', closed: 'outline', cancelled: 'outline', rejected: 'destructive',
 };

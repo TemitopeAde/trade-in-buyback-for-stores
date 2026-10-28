@@ -16,7 +16,7 @@ function normalizeCatalogResponse(res: CatalogSearchResponse | CatalogItem[]): C
 export function ProductPicker({
   selected,
   onSelect,
-  layout = 'grid',
+  layout = 'table',
 }: {
   selected?: CatalogItem;
   onSelect: (item: CatalogItem) => void;

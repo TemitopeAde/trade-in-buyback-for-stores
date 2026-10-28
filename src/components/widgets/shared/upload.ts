@@ -95,6 +95,11 @@ export function readVideoDuration(file: File): Promise<number | undefined> {
   });
 }
 
+/** A new upload session ID (64 hex chars, within the server's 40–64 character format). */
+export function newUploadSessionId(): string {
+  return [...crypto.getRandomValues(new Uint8Array(32))].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 export async function uploadEvidence(p: {
   kind: MediaKind;
   file: File;

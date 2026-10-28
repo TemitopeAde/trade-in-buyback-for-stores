@@ -33,16 +33,21 @@ ${button}
 /** actorType: who made the status change the email is about, when it matters for the wording. */
 type Ctx = { doc: TradeInDoc; locale: string; storeName: string; statusUrl?: string; actorType?: ActorType; extra?: Record<string, string> };
 
+function formatDate(d: Date | string | undefined, locale: string): string {
+  return d ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(d)) : '';
+}
+
 function vars(c: Ctx) {
   const money = (minor?: number) => (minor === undefined ? '' : formatMoney(minor, c.doc.currency, c.locale));
   return {
     reference: c.doc.reference,
     item: c.doc.productTitle,
     name: c.doc.customerName,
-    amount: money(c.doc.revisedValueMinor ?? c.doc.finalValueMinor ?? c.doc.estimatedValueMinor),
+    // A custom item's estimate stays 0 until a quote is accepted, so its quote stands in.
+    amount: money(c.doc.revisedValueMinor ?? c.doc.finalValueMinor ?? (c.doc.estimatedValueMinor || c.doc.quotedValueMinor)),
     original: money(c.doc.estimatedValueMinor),
     reason: c.doc.status === 'revised_offer_pending' ? (c.doc.revisedOfferReason ?? '') : (c.doc.rejectionReason ?? ''),
-    date: c.doc.revisedOfferExpiresAt ? new Intl.DateTimeFormat(c.locale, { dateStyle: 'medium' }).format(new Date(c.doc.revisedOfferExpiresAt)) : '',
+    date: formatDate(c.doc.revisedOfferExpiresAt ?? c.doc.quoteExpiresAt, c.locale),
     store: c.storeName,
     tracking: c.doc.trackingNumber ?? '',
     ...c.extra,
@@ -69,6 +74,11 @@ export function customerEmail(event: CustomerNotificationEvent, c: Ctx): EmailCo
 
 function customerBody(event: CustomerNotificationEvent, c: Ctx): MessageKey {
   switch (event) {
+    case 'submitted':
+      return c.doc.customItem ? 'email.customer.submitted.custom' : 'email.customer.submitted.body';
+    case 'quote_decision':
+      if (c.doc.status === 'approved') return 'email.customer.quote_decision.accepted';
+      return c.actorType === 'system' ? 'email.customer.quote_decision.expired' : 'email.customer.quote_decision.declined';
     case 'revised_offer_decision':
       if (c.doc.status !== 'return_pending' && c.doc.status !== 'revised_offer_declined') return 'email.customer.revised_offer_decision.accepted';
       // The system declines on the customer's behalf only when the offer expired.
@@ -92,6 +102,8 @@ export function merchantEmail(event: MerchantNotificationEvent, c: Ctx): EmailCo
       ? 'email.merchant.credit_issued.codeNotSent'
       : event === 'shipped' && c.doc.trackingNumber
         ? 'email.merchant.shipped.withTracking'
+        : event === 'submitted' && c.doc.customItem
+          ? 'email.merchant.submitted.custom'
         : `email.merchant.${event}.body`;
   return {
     subject,

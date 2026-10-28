@@ -333,8 +333,6 @@ export const hi: Catalog = {
   'dash.settings.allowCancel': 'वस्तु भेजने से पहले ग्राहक को रद्द करने की अनुमति दें',
   'dash.settings.allowTracking': 'ग्राहक को कूरियर ट्रैकिंग नंबर दर्ज करने की अनुमति दें',
   'dash.settings.credit': 'स्टोर क्रेडिट',
-  'dash.settings.currency': 'मुद्रा कोड',
-  'dash.settings.currencyHelp': 'तीन अक्षरों का मुद्रा कोड (जैसे INR, USD, EUR).',
   'dash.settings.dropOff': 'दुकान पर प्रत्यक्ष जमा',
   'dash.settings.expiry': 'उपहार कार्ड समाप्ति (महीने)',
   'dash.settings.expiryHelp': 'असीमित वैधता के लिए खाली छोड़ें।',

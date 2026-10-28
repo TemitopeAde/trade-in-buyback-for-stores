@@ -333,8 +333,6 @@ export const te: Catalog = {
   'dash.settings.allowCancel': 'వస్తువును పంపే ముందు కస్టమర్ రద్దు చేసుకోవడానికి అనుమతించండి',
   'dash.settings.allowTracking': 'కస్టమర్ కొరియర్ ట్రాకింగ్ నంబర్‌ను నమోదు చేయడానికి అనుమతించండి',
   'dash.settings.credit': 'స్టోర్ క్రెడిట్',
-  'dash.settings.currency': 'కరెన్సీ కోడ్',
-  'dash.settings.currencyHelp': 'మూడక్షరాల కరెన్సీ కోడ్ (ఉదా. INR, USD, EUR).',
   'dash.settings.dropOff': 'స్టోర్‌లో నేరుగా ఇవ్వడం',
   'dash.settings.expiry': 'గిఫ్ట్ కార్డు చెల్లుబాటు (నెలలు)',
   'dash.settings.expiryHelp': 'అపరిమిత చెల్లుబాటు కోసం ఖాళీగా ఉంచండి.',

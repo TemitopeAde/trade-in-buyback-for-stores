@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MEDIA_LIMITS, type MediaKind } from '../../../lib/media-limits';
 import { errorMessageKey, widgetApi } from './api';
-import { readVideoDuration, uploadEvidence, validateFile, type ValidationIssue } from './upload';
+import { newUploadSessionId, readVideoDuration, uploadEvidence, validateFile, type ValidationIssue } from './upload';
 import type { MessageKey } from '../../../lib/i18n';
 
 export type UploadItem = {
@@ -34,6 +34,9 @@ export function useUploads(maxVideoSeconds: number) {
     const controller = new AbortController();
     controllers.current.set(item.localId, controller);
     patch(item.localId, { status: 'uploading', progress: 0, error: undefined });
+    // Set before the first await: files uploading at the same time must share one session, or
+    // the submission (which names a single session) can't find the others' media.
+    sessionRef.current ??= newUploadSessionId();
     try {
       const { uploadSessionId, media } = await uploadEvidence({
         kind: item.kind,
