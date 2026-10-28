@@ -131,6 +131,11 @@ export function FormFlow({
   const uploads = useUploads(state.config?.media.videoMaxSeconds ?? 60);
 
   const steps = [t('form.step.item'), t('form.step.condition'), t('form.step.evidence'), t('form.step.offer')];
+  // Without uploads on the store's plan the evidence step (index 2) is skipped; step numbers stay
+  // the same internally and only the stepper shows three steps.
+  const skipEvidence = state.config?.uploads === false;
+  const shownSteps = skipEvidence ? steps.filter((_, i) => i !== 2) : steps;
+  const shownCurrent = skipEvidence && state.step > 2 ? state.step - 1 : state.step;
 
   // Prefill from initialProductId or ?product= (e.g. from the product page CTA). Still verified by the server.
   useEffect(() => {
@@ -200,6 +205,7 @@ export function FormFlow({
     if (step === 0) {
       if (!state.item || !config) out.push({ key: 'validation.selectItem' });
       else if (!config.eligible) out.push({ key: 'form.item.notEligible' });
+      else if (config.accepting === false) out.push({ key: 'form.notAccepting' });
     }
     if (step === 1 && config) {
       for (const q of config.questions) {
@@ -207,7 +213,7 @@ export function FormFlow({
       }
       if (estimate && !estimate.eligible) out.push({ key: 'form.offer.unavailable' });
     }
-    if (step === 2 && config) {
+    if (step === 2 && config && !skipEvidence) {
       if (uploads.items.some((i) => i.status === 'uploading')) out.push({ key: 'validation.uploadsInProgress' });
       if (photos.filter(usable).length < config.media.photoMinimum) out.push({ key: 'validation.photosMin', vars: { count: config.media.photoMinimum } });
       if (config.media.videoMode === 'required' && !videos.some(usable)) out.push({ key: 'validation.videoRequired' });
@@ -231,11 +237,11 @@ export function FormFlow({
   const next = () => {
     const found = validateStep(state.step);
     showIssues(found);
-    if (!found.length) dispatch({ type: 'step', step: state.step + 1 });
+    if (!found.length) dispatch({ type: 'step', step: skipEvidence && state.step === 1 ? 3 : state.step + 1 });
   };
   const back = () => {
     setIssues([]);
-    dispatch({ type: 'step', step: Math.max(0, state.step - 1) });
+    dispatch({ type: 'step', step: skipEvidence && state.step === 3 ? 1 : Math.max(0, state.step - 1) });
   };
 
   const submit = async () => {
@@ -277,7 +283,7 @@ export function FormFlow({
   return (
     <div className="ti-stack">
       <WidgetHeader id="ti-form-title" defaultTitle={t('form.title')} defaultDescription={t('form.description')} />
-      <TradeInStepper steps={steps} current={state.step} />
+      <TradeInStepper steps={shownSteps} current={shownCurrent} />
 
       <div ref={summaryRef} tabIndex={-1} style={{ outline: 'none' }}>
         {issues.length > 0 && (
@@ -301,6 +307,7 @@ export function FormFlow({
               {state.configLoading && <Loading />}
               {configError && <TradeInErrorState message={configError} onRetry={loadConfig} />}
               {config && !config.eligible && <Alert tone="info">{t('form.item.notEligible')}</Alert>}
+              {config?.eligible && config.accepting === false && <Alert tone="info">{t('form.notAccepting')}</Alert>}
               {config?.eligible && config.product && (
                 <p className="ti-helper" role="status">
                   {t('form.item.selected')}: <strong>{config.product.title}</strong>
@@ -402,6 +409,7 @@ function submitErrorKey(err: unknown): MessageKey {
     if (f.media === 'video_required') return 'validation.videoRequired';
     if (f.answers) return 'form.offer.unavailable';
     if (f.handoffMethod) return 'validation.handoff';
+    if (f.form === 'not_accepting') return 'form.notAccepting';
   }
   return errorMessageKey(err);
 }

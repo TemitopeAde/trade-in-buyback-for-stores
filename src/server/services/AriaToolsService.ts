@@ -5,6 +5,7 @@ import { NOTIFICATION_EVENTS } from '../../lib/schemas/domain';
 import { COLLECTIONS } from '../collections';
 import { sha256Hex, stableStringify } from '../crypto';
 import { AppError } from '../errors';
+import type { PlanLimits } from './PlanService';
 import type { Repo } from '../repo';
 import type { Actor, TradeInDoc } from '../types';
 import type { CreditService } from './CreditService';
@@ -28,6 +29,8 @@ type Deps = {
   reporting: ReportingService;
   rules: RulesService;
   settings: SettingsService;
+  /** Plan limits (Aria tools are a Business feature). Omitted = unlimited. */
+  plan?: PlanLimits;
 };
 
 export type ToolContext = { instanceId: string; userId: string };
@@ -51,6 +54,9 @@ export class AriaToolsService {
   async run(ctx: ToolContext, methodName: string, payload: Payload): Promise<Record<string, unknown>> {
     const actor: Actor = { type: 'assistant', id: ctx.userId };
     const I = ctx.instanceId;
+    if (this.d.plan && !(await this.d.plan.entitlements(I)).ariaTools) {
+      throw new AppError('forbidden', 'Trade-in assistant tools are available on the Business plan.');
+    }
     switch (methodName) {
       case 'search-trade-ins': {
         const group = str(payload, 'statusGroup');
@@ -225,12 +231,12 @@ export class AriaToolsService {
         const enabled = p.enabled === true;
         if (audience !== 'merchant' && audience !== 'customer') throw new AppError('bad_request', 'audience must be merchant or customer');
         if (!(NOTIFICATION_EVENTS[audience] as readonly string[]).includes(event)) throw new AppError('bad_request', 'unknown event');
-        const current = await this.d.settings.get(I);
+        const current = await this.d.settings.getStored(I);
         return {
           summary: `${enabled ? 'Turn on' : 'Turn off'} the “${event}” email to ${audience === 'merchant' ? 'your team' : 'customers'}.`,
           revisionKey: `notif:${audience}:${event}:${(current.notifications[audience] as Record<string, boolean>)[event]}`, args: { audience, event, enabled },
           execute: async () => {
-            const s = await this.d.settings.get(I);
+            const s = await this.d.settings.getStored(I);
             (s.notifications[audience] as Record<string, boolean>)[event] = enabled;
             await this.d.settings.save(I, s);
             return { audience, event, enabled };

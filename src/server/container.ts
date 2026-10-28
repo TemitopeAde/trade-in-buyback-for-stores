@@ -29,7 +29,7 @@ const repo = wixDataRepo;
 export const planService = new PlanService();
 export const idempotency = new IdempotencyService(repo);
 export const outbox = new OutboxService(repo, () => new Date(), (i, op, k) => idempotency.lock(i, op, k));
-export const settings = new SettingsService(repo);
+export const settings = new SettingsService(repo, planService);
 export const rules = new RulesService(repo);
 export const tokens = new AccessTokenService(repo);
 export const wixMedia = new WixMediaService();
@@ -38,7 +38,7 @@ export const lifecycle = new TradeInLifecycleService(repo, idempotency, outbox);
 export const catalog = new WixCatalogService();
 export const orders = new WixOrdersService();
 export const sitePlugins = new WixSitePluginsService();
-export const tradeIns = new TradeInService({ repo, catalog, orders, rules, settings, media, lifecycle, idempotency, outbox, tokens });
+export const tradeIns = new TradeInService({ repo, catalog, orders, rules, settings, media, lifecycle, idempotency, outbox, tokens, plan: planService });
 export const giftCards = new WixGiftCardsService();
 export const emails = new WixEmailTransmissionsService();
 export const credit = new CreditService(lifecycle, giftCards, settings, outbox);
@@ -53,10 +53,11 @@ export const merchant = new MerchantService({
   catalogVersion: getCatalogVersion,
   giftCardsAvailable: () => giftCards.available(),
   pluginPlaced: () => sitePlugins.isPluginPlaced(CTA_PLUGIN_ID),
+  plan: planService,
 });
 export const resale = new ResaleDraftService(lifecycle, settings, outbox);
 export const reporting = new ReportingService(repo);
-export const aria = new AriaToolsService({ repo, merchant, credit, resale, reporting, rules, settings });
+export const aria = new AriaToolsService({ repo, merchant, credit, resale, reporting, rules, settings, plan: planService });
 export { repo };
 
 const disconnectedCache = new Map<string, { value: boolean; at: number }>();

@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { giftCards, outbox } from '../../../server/container';
+import { giftCards, outbox, planService } from '../../../server/container';
+import { AppError } from '../../../server/errors';
 import { route } from '../../../server/http';
 import { requireMerchant } from '../../../server/services/AuthorizationService';
 
@@ -15,6 +16,7 @@ export const GET = route(z.object({}), async (ctx) => {
 });
 export const POST = route(z.object({ id: z.string().min(1).max(64) }), async (ctx, { id }) => {
   requireMerchant(ctx);
+  if (!(await planService.entitlements(ctx.instanceId)).expeditedRetry) throw new AppError('forbidden', 'revive_requires_pro');
   await outbox.revive(ctx.instanceId, id);
   return { ok: true };
 });

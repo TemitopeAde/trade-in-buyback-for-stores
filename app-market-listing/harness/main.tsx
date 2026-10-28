@@ -113,8 +113,10 @@ const choose = (question: string, option: string) => {
     await until(() => document.querySelector('.ti-helper[role="status"]'));
     (await until(() => button('Continue'))).click();
     await until(() => document.querySelector('fieldset'));
-    choose('power on', 'Yes, fully working');
-    choose('cosmetic', 'Light wear');
+    // ?pick=none|works stops part-way, for the promo film's before-states.
+    const pick = params.get('pick') ?? 'all';
+    if (pick !== 'none') choose('power on', 'Yes, fully working');
+    if (pick === 'all') choose('cosmetic', 'Light wear');
   }
   if (scene === 'cta' && params.has('open')) {
     (await until(() => document.querySelector<HTMLButtonElement>('.ti-cta button'))).click();
@@ -128,5 +130,21 @@ const choose = (question: string, option: string) => {
   await new Promise((r) => setTimeout(r, 600));
   (document.activeElement as HTMLElement | null)?.blur();
   window.scrollTo(0, Number(params.get('scroll') ?? 0));
+  // ?measure=Label|Label writes the CSS-pixel boxes of the smallest elements with that exact
+  // text into <pre id="rects">, read back with Chrome's --dump-dom (the promo film's cursor targets).
+  const measure = params.get('measure');
+  if (measure) {
+    const rects: Record<string, number[]> = {};
+    for (const label of measure.split('|')) {
+      const el = [...document.querySelectorAll<HTMLElement>('body *')].reverse().find((e) => e.textContent?.trim() === label && e.offsetWidth > 0);
+      const box = (el?.closest('button, label, [role="button"]') ?? el)?.getBoundingClientRect();
+      if (box) rects[label] = [box.x + scrollX, box.y + scrollY, box.width, box.height].map((n) => Math.round(n));
+    }
+    const pre = document.createElement('pre');
+    pre.id = 'rects';
+    pre.hidden = true;
+    pre.textContent = JSON.stringify(rects);
+    document.body.append(pre);
+  }
   document.body.dataset.ready = '1';
 })().catch((e) => console.error('[harness]', e));

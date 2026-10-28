@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { getPlanEntitlements, type PlanTier } from '../../src/lib/plans';
 import { COLLECTIONS } from '../../src/server/collections';
 import { IdempotencyService } from '../../src/server/services/IdempotencyService';
 import { MerchantService } from '../../src/server/services/MerchantService';
@@ -16,13 +17,14 @@ const merchantActor = { type: 'merchant' as const, id: 'u1' };
 let n = 0;
 const key = () => `idem-key-${String(++n).padStart(8, '0')}`;
 
-function setup() {
+function setup(planTier?: PlanTier) {
   const repo = new MemoryRepo();
+  const plan = planTier ? { entitlements: async () => getPlanEntitlements(planTier) } : undefined;
   const idempotency = new IdempotencyService(repo);
   const lifecycle = new TradeInLifecycleService(repo, idempotency, new OutboxService(repo));
   const svc = new MerchantService({
     repo, lifecycle, media: new TradeInMediaService(repo, { viewUrl: async () => 'https://signed' } as unknown as WixMediaService),
-    rules: new RulesService(repo), settings: new SettingsService(repo), catalogVersion: async () => 'V3_CATALOG',
+    rules: new RulesService(repo), settings: new SettingsService(repo), catalogVersion: async () => 'V3_CATALOG', plan,
   });
   return { repo, svc };
 }
@@ -95,5 +97,18 @@ describe('MerchantService', () => {
     expect(o.counts.needs_review).toBe(1);
     expect(o.counts.awaiting_handoff).toBe(1);
     expect(o.setup).toMatchObject({ storesInstalled: true, hasRules: false, settingsSaved: false });
+  });
+});
+
+describe('MerchantService plan limits', () => {
+  it('offers and accepts revised offers only on paid plans', async () => {
+    const basic = setup('basic');
+    const doc = await seed(basic.repo, { status: 'inspection' });
+    expect((await basic.svc.detail(I, doc._id)).actions).not.toContain('send_revised_offer');
+    await expect(basic.svc.act(I, { type: 'merchant', id: 'u' }, { tradeInId: doc._id, action: 'send_revised_offer', expectedRevision: 1, reason: 'Scratches', revisedValueMinor: 30_00, idempotencyKey: key() }))
+      .rejects.toMatchObject({ code: 'forbidden' });
+    const pro = setup('pro');
+    const doc2 = await seed(pro.repo, { status: 'inspection' });
+    expect((await pro.svc.detail(I, doc2._id)).actions).toContain('send_revised_offer');
   });
 });

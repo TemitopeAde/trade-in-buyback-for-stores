@@ -1,21 +1,30 @@
+import { applyPlanToSettings } from '../../lib/plans';
 import { defaultSettings, SETTINGS_SCHEMA_VERSION, settingsSchema, type Settings } from '../../lib/schemas/domain';
 import { COLLECTIONS } from '../collections';
 import { AppError } from '../errors';
 import { DuplicateKeyError, type Doc, type Repo } from '../repo';
+import type { PlanLimits } from './PlanService';
 
 type SettingsDoc = Doc & { instanceId: string; schemaVersion: number; settings: unknown; disconnected?: boolean };
 
 // One settings record per instance. Missing settings resolve to defaults in memory; nothing
 // is written until the merchant saves, so installs never create placeholder records.
+// `get` returns settings as they take effect on the site's plan; `getStored` returns what the
+// merchant saved, for editing (so a downgrade never erases settings an upgrade would restore).
 
 export class SettingsService {
-  constructor(private readonly repo: Repo) {}
+  constructor(private readonly repo: Repo, private readonly plan?: PlanLimits) {}
 
   private async doc(instanceId: string): Promise<SettingsDoc | undefined> {
     return (await this.repo.find<SettingsDoc>(COLLECTIONS.settings, { instanceId }, { limit: 1 })).items[0];
   }
 
   async get(instanceId: string): Promise<Settings> {
+    const stored = await this.getStored(instanceId);
+    return this.plan ? applyPlanToSettings(stored, await this.plan.entitlements(instanceId)) : stored;
+  }
+
+  async getStored(instanceId: string): Promise<Settings> {
     const doc = await this.doc(instanceId);
     if (!doc) return defaultSettings();
     const parsed = settingsSchema.safeParse(doc.settings);

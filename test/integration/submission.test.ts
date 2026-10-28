@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { getPlanEntitlements, type PlanTier } from '../../src/lib/plans';
 import type { SubmitRequest } from '../../src/lib/schemas/api';
+import { defaultSettings } from '../../src/lib/schemas/domain';
 import { COLLECTIONS } from '../../src/server/collections';
 import type { RequestContext } from '../../src/server/context';
 import { AccessTokenService } from '../../src/server/services/AuthorizationService';
@@ -22,18 +24,21 @@ const SESSION = 'S'.repeat(43);
 
 const product: CatalogProduct = { productId: 'p1', title: 'Phone', priceMinor: 100_00, currency: 'USD', categoryIds: ['c1'], visible: true, catalogVersion: 'V3_CATALOG' };
 
-function setup() {
+function setup(planTier?: PlanTier) {
   const repo = new MemoryRepo();
   const idempotency = new IdempotencyService(repo);
   const outbox = new OutboxService(repo);
-  const settings = new SettingsService(repo);
+  const plan = planTier ? { entitlements: async () => getPlanEntitlements(planTier) } : undefined;
+  const settings = new SettingsService(repo, plan);
   const rules = new RulesService(repo);
   const tokens = new AccessTokenService(repo);
   const media = new TradeInMediaService(repo, {} as WixMediaService);
   const lifecycle = new TradeInLifecycleService(repo, idempotency, outbox);
   const orderOwnership = new Map<string, string>([['o1', 'm1']]);
   const svc = new TradeInService({
-    repo, rules, settings, media, lifecycle, idempotency, outbox, tokens,
+    repo, rules, settings, media, lifecycle, idempotency, outbox, tokens, plan,
+    // The in-memory repo stamps documents in January 2026.
+    now: () => new Date(Date.UTC(2026, 0, 15)),
     catalog: { getProduct: async (_i, id) => (id === product.productId ? product : undefined), search: async () => [product] },
     orders: {
       eligibleItemsForMember: async () => [],
@@ -155,5 +160,46 @@ describe('evidence upload limits', () => {
     const ids: string[] = [];
     for (let i = 0; i < 11; i++) ids.push((await seedPhoto(repo, { mediaManagerFileId: `f${i}` }))._id);
     await expect(media.validateForSubmission(INSTANCE, SESSION, ids, { photoMinimum: 1, videoMode: 'off', videoMaxSeconds: 60 })).rejects.toMatchObject({ code: 'bad_request', message: 'too many files' });
+  });
+});
+
+describe('plan limits on submission', () => {
+  it('takes one request a month on basic, then stops accepting', async () => {
+    const ctx = setup('basic');
+    await seedRule(ctx.rules);
+    const config = await ctx.svc.formConfig(visitor, 'p1');
+    expect(config).toMatchObject({ accepting: true, uploads: false, media: { photoMinimum: 0, videoMode: 'off' } });
+    await ctx.svc.submit(visitor, request());
+    // Replaying the accepted submission still works; a new one is refused.
+    await expect(ctx.svc.submit(visitor, request())).resolves.toBeTruthy();
+    await expect(ctx.svc.submit(visitor, request({ submissionKey: 'submission-key-0002' }))).rejects.toMatchObject({ fields: { form: 'not_accepting' } });
+    expect((await ctx.svc.formConfig(visitor, 'p1')).accepting).toBe(false);
+    expect((await ctx.svc.productCta(visitor, 'p1')).eligible).toBe(false);
+    expect(await ctx.svc.monthlyUsage(INSTANCE)).toEqual({ used: 1, limit: 1 });
+  });
+
+  it('refuses uploaded media and ship-in on basic', async () => {
+    const ctx = setup('basic');
+    await seedRule(ctx.rules);
+    const st = defaultSettings();
+    st.handoff.shipIn.enabled = true;
+    await ctx.settings.save(INSTANCE, st);
+    const photo = await seedPhoto(ctx.repo);
+    await expect(ctx.svc.submit(visitor, request({ mediaIds: [photo._id] }))).rejects.toMatchObject({ fields: { media: 'not_available' } });
+    await expect(ctx.svc.submit(visitor, request({ submissionKey: 'submission-key-0002', handoffMethod: 'ship_in' }))).rejects.toMatchObject({ fields: { handoffMethod: 'disabled' } });
+    // The saved setting is kept for when the store upgrades.
+    expect((await ctx.settings.getStored(INSTANCE)).handoff.shipIn.enabled).toBe(true);
+  });
+
+  it('keeps the rule photo requirement and ship-in on pro', async () => {
+    const ctx = setup('pro');
+    await seedRule(ctx.rules);
+    const st = defaultSettings();
+    st.handoff.shipIn.enabled = true;
+    await ctx.settings.save(INSTANCE, st);
+    const config = await ctx.svc.formConfig(visitor, 'p1');
+    expect(config).toMatchObject({ accepting: true, uploads: true, media: { photoMinimum: 1 } });
+    expect(config.handoffMethods.map((h) => h.method)).toEqual(['drop_off', 'ship_in']);
+    expect(await ctx.svc.monthlyUsage(INSTANCE)).toEqual({ used: 0, limit: 100 });
   });
 });

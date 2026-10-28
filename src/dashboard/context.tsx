@@ -139,7 +139,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       go,
       errorText,
       plan: planStatus.plan,
-      entitlements: planStatus.entitlements,
+      // Derived locally: Infinity limits don't survive JSON, so the API's copy can't be trusted for them.
+      entitlements: getPlanEntitlements(planStatus.plan),
       upgradeUrl: planStatus.upgradeUrl,
       can,
       isBasic: planStatus.plan === 'basic',

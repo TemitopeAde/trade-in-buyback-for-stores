@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { getPlanEntitlements, type PlanTier } from '../../src/lib/plans';
 import { defaultSettings } from '../../src/lib/schemas/domain';
 import { COLLECTIONS } from '../../src/server/collections';
 import { AccessTokenService } from '../../src/server/services/AuthorizationService';
@@ -59,12 +60,13 @@ class FakeEmail {
   async get() { return undefined; }
 }
 
-function setup() {
+function setup(planTier?: PlanTier) {
   const repo = new MemoryRepo();
+  const plan = planTier ? { entitlements: async () => getPlanEntitlements(planTier) } : undefined;
   const idempotency = new IdempotencyService(repo);
   const outbox = new OutboxService(repo, () => new Date(), (i, op, k) => idempotency.lock(i, op, k));
   const lifecycle = new TradeInLifecycleService(repo, idempotency, outbox);
-  const settings = new SettingsService(repo);
+  const settings = new SettingsService(repo, plan);
   const gift = new FakeGiftCards();
   const email = new FakeEmail();
   const credit = new CreditService(lifecycle, gift, settings, outbox);
@@ -350,5 +352,27 @@ describe('status change emails', () => {
   it('sends nothing when a credited trade-in is closed', async () => {
     const closed = await run({ status: 'credit_issued' }, 'close', { type: 'merchant', id: 'u' });
     expect(closed.types).toEqual([]);
+  });
+});
+
+describe('emails on the basic plan', () => {
+  it('sends only the core customer emails and new-submission team emails', async () => {
+    const s = setup('basic');
+    const st = defaultSettings();
+    st.notifications.staffUserIds = ['owner-user', 'second-user'];
+    st.notifications.senderName = 'My Store';
+    await s.settings.save(I, st);
+    const doc = await seed(s.repo, { status: 'submitted' });
+    await s.outbox.enqueue({ instanceId: I, eventType: 'trade_in.submitted', tradeInId: doc._id, payload: {}, dedupeKey: 'sub' });
+    await s.lifecycle.transition({ instanceId: I, tradeInId: doc._id, action: 'approve', actor: { type: 'merchant', id: 'u' } });
+    await s.lifecycle.transition({ instanceId: I, tradeInId: doc._id, action: 'receive', actor: { type: 'merchant', id: 'u' }, expectedRevision: 2 });
+    for (let i = 0; i < 10; i++) await s.outbox.processDue(s.processor.handle, { limit: 1 });
+    const byType = Object.fromEntries(s.repo.all<NotificationDoc>(COLLECTIONS.notifications).map((n) => [n.eventType, n.status]));
+    expect(byType).toMatchObject({
+      'customer.submitted': 'accepted', 'merchant.submitted': 'accepted', 'customer.approved': 'accepted',
+      'merchant.approved': 'skipped', 'customer.received': 'skipped', 'merchant.received': 'skipped',
+    });
+    // One team recipient on basic, and no custom sender name.
+    expect(s.email.sent.find((m) => m.subject.startsWith('New trade-in'))!.to).toEqual([{ userId: 'owner-user' }]);
   });
 });

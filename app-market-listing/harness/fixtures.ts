@@ -32,6 +32,8 @@ const formConfig = (productId: string): FormConfig => {
   const p = CATALOG.find((c) => c.productId === productId) ?? CATALOG[0];
   return {
     eligible: true,
+    accepting: true,
+    uploads: true,
     product: { productId: p.productId, title: p.title, imageUrl: p.imageUrl },
     questions: QUESTIONS,
     media: { photoMinimum: 3, videoMode: 'optional', videoMaxSeconds: 30 },
@@ -136,6 +138,7 @@ const DETAIL: AdminTradeInDetail = {
 const OVERVIEW: OverviewResponse = {
   counts: { needs_review: 4, awaiting_handoff: 3, in_inspection: 2, awaiting_customer: 1, credit: 2, closed: 18 },
   creditIssuedMinorByCurrency: { USD: 184300 },
+  usage: { used: 28, limit: null },
   recent: DETAIL.timeline.slice().reverse().map((e, i) => ({ ...e, id: `r${i}` })),
   setup: {
     storesInstalled: true, catalogVersion: 'V3', hasRules: true, settingsSaved: true, formPageConfigured: true,
@@ -148,6 +151,25 @@ const MINE: MyTradeInsResponse = {
   items: ROWS.slice(0, 4).map((r) => ({ tradeInId: r.id, reference: r.reference, status: r.status, productTitle: r.productTitle, createdAt: r.createdAt, estimatedValueMinor: r.estimatedValueMinor, currency: r.currency })),
 };
 
+// ?state=credit: the same request after the merchant confirmed the value (promo film end state).
+const credited = new URLSearchParams(location.search).get('state') === 'credit';
+const CREDITED_STATUS: CustomerTradeInView = {
+  ...STATUS_VIEW,
+  status: 'credit_issued',
+  finalValueMinor: 7200,
+  revisedOffer: undefined,
+  actions: [],
+  timeline: [...STATUS_VIEW.timeline.slice(0, 4), { status: 'credit_issued', at: daysAgo(0, 9) }],
+};
+const CREDITED_DETAIL: AdminTradeInDetail = {
+  ...DETAIL,
+  status: 'credit_issued',
+  finalValueMinor: 7200,
+  giftCardStatus: 'issued',
+  actions: [],
+  timeline: [...DETAIL.timeline, { id: 'e5', eventType: 'status', fromStatus: 'inspection', toStatus: 'credit_issued', actorType: 'merchant', at: daysAgo(0, 9) }],
+};
+
 type Handler = (q: URLSearchParams, body: any) => unknown;
 const routes: Record<string, Handler> = {
   '/api/catalog/search': (q) => ({ items: CATALOG.filter((c) => c.title.toLowerCase().includes((q.get('q') ?? '').toLowerCase())), hasMore: false }),
@@ -155,14 +177,14 @@ const routes: Record<string, Handler> = {
   '/api/catalog/product-cta': () => ({ eligible: true, upToMinor: 9000, currency: 'USD', formPageUrl: '/trade-in' }),
   '/api/trade-ins/form-config': (q) => formConfig(q.get('productId') ?? 'p-aero'),
   '/api/trade-ins/estimate': (_q, b) => estimate(b?.answers ?? {}),
-  '/api/trade-ins/status': () => STATUS_VIEW,
+  '/api/trade-ins/status': () => (credited ? CREDITED_STATUS : STATUS_VIEW),
   '/api/trade-ins/mine': () => MINE,
   '/api/admin/overview': () => OVERVIEW,
   '/api/admin/trade-ins': (q) => {
     const items = ROWS.filter((r) => !q.get('status') || r.status === q.get('status'));
     return { items, total: items.length, page: 0, pageSize: 25 } satisfies AdminListResponse;
   },
-  '/api/admin/trade-in': () => DETAIL,
+  '/api/admin/trade-in': () => (credited ? CREDITED_DETAIL : DETAIL),
   '/api/admin/notifications': () => ({
     preferences: {},
     currentUserId: 'u1',

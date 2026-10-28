@@ -131,6 +131,8 @@ export type OverviewResponse = {
   creditIssuedMinorByCurrency: Record<string, number>;
   recent: AdminTimelineEntry[];
   setup: SetupChecklist;
+  /** Trade-in requests this calendar month against the plan allowance (limit null = unlimited). */
+  usage: { used: number; limit: number | null };
 };
 
 export type SetupChecklist = {

@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { defaultSettings } from '../../src/lib/schemas/domain';
 import {
   APP_ID,
+  applyPlanToSettings,
   canPerformAction,
+  emailAllowed,
   getPlanEntitlements,
   getUpgradeUrl,
   normalizePlanTier,
@@ -47,7 +50,7 @@ describe('plans and entitlements', () => {
       expect(e.csvExport).toBe(false);
       expect(e.advancedStyling).toBe(true);
       expect(e.expeditedRetry).toBe(false);
-      expect(e.maxReportDays).toBe(14);
+      expect(e.maxReportDays).toBe(7);
     });
 
     it('returns pro entitlements with expanded limits', () => {
@@ -74,6 +77,41 @@ describe('plans and entitlements', () => {
       expect(e.advancedStyling).toBe(true);
       expect(e.expeditedRetry).toBe(true);
       expect(e.maxReportDays).toBe(365);
+    });
+  });
+
+  describe('basic plan limits', () => {
+    it('allows one request a month and only the core emails', () => {
+      const e = getPlanEntitlements('basic');
+      expect(e).toMatchObject({ maxRequestsPerMonth: 1, shipIn: false, mediaUploads: false, revisedOffers: false, maxStaffRecipients: 1, customSender: false, ariaTools: false });
+      expect(emailAllowed(e, 'customer', 'approved')).toBe(true);
+      expect(emailAllowed(e, 'customer', 'revised_offer')).toBe(false);
+      expect(emailAllowed(e, 'merchant', 'submitted')).toBe(true);
+      expect(emailAllowed(e, 'merchant', 'credit_issued')).toBe(false);
+      expect(getPlanEntitlements('business').ariaTools).toBe(true);
+      expect(getPlanEntitlements('pro').ariaTools).toBe(false);
+    });
+
+    it('applies plan limits to settings without losing the saved values', () => {
+      const st = defaultSettings();
+      st.handoff.dropOff.enabled = false;
+      st.handoff.shipIn.enabled = true;
+      st.mediaRetentionDays = 200;
+      st.notifications.staffUserIds = ['a', 'b', 'c'];
+      st.notifications.senderName = 'My Store';
+      const basic = applyPlanToSettings(st, getPlanEntitlements('basic'));
+      expect(basic.handoff.shipIn.enabled).toBe(false);
+      expect(basic.handoff.dropOff.enabled).toBe(true);
+      expect(basic.mediaRetentionDays).toBe(30);
+      expect(basic.notifications.staffUserIds).toEqual(['a']);
+      expect(basic.notifications.senderName).toBe('');
+      expect(basic.notifications.customer.revised_offer).toBe(false);
+      expect(basic.notifications.merchant.submitted).toBe(true);
+      expect(st.handoff.shipIn.enabled).toBe(true);
+      const pro = applyPlanToSettings(st, getPlanEntitlements('pro'));
+      expect(pro.handoff).toMatchObject({ dropOff: { enabled: false }, shipIn: { enabled: true } });
+      expect(pro.mediaRetentionDays).toBe(90);
+      expect(pro.notifications.staffUserIds).toEqual(['a', 'b', 'c']);
     });
   });
 

@@ -7,7 +7,7 @@ import { requireMerchant } from '../../../server/services/AuthorizationService';
 // POST /api/admin/settings — validated full replacement.
 export const GET = route(z.object({}), (ctx) => {
   requireMerchant(ctx);
-  return settings.get(ctx.instanceId);
+  return settings.getStored(ctx.instanceId);
 });
 export const POST = route(z.object({ settings: z.unknown() }), (ctx, input) => {
   requireMerchant(ctx);

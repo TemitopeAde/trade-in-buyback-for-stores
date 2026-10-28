@@ -1,5 +1,6 @@
 import { availableActions, type TradeInStatus } from '../../lib/lifecycle';
 import { calculateOffer, maximumPossibleOffer, OFFER_CALCULATION_VERSION, selectRule } from '../../lib/offer';
+import { monthStart, type PlanEntitlements } from '../../lib/plans';
 import type {
   CatalogItem,
   CatalogSearchResponse,
@@ -22,6 +23,7 @@ import type { TradeInDoc, TradeInEventDoc } from '../types';
 import { type AccessTokenService, authorizeCustomer, memberIdOf, requireSiteCaller } from './AuthorizationService';
 import type { IdempotencyService } from './IdempotencyService';
 import type { OutboxService } from './OutboxService';
+import type { PlanLimits } from './PlanService';
 import type { RulesService } from './RulesService';
 import type { SettingsService } from './SettingsService';
 import type { TradeInLifecycleService } from './TradeInLifecycleService';
@@ -51,8 +53,12 @@ type Deps = {
   idempotency: IdempotencyService;
   outbox: OutboxService;
   tokens: AccessTokenService;
+  /** Plan limits (monthly requests, uploads). Omitted = unlimited. */
+  plan?: PlanLimits;
   now?: () => Date;
 };
+
+const NO_MEDIA = { photoMinimum: 0, videoMode: 'off', videoMaxSeconds: 0 } as const;
 
 const SHOW_HANDOFF_FROM: readonly TradeInStatus[] = ['approved', 'in_transit', 'return_pending'];
 
@@ -60,6 +66,26 @@ export class TradeInService {
   private readonly now: () => Date;
   constructor(private readonly d: Deps) {
     this.now = d.now ?? (() => new Date());
+  }
+
+  // ---- Plan limits ------------------------------------------------------------------
+
+  private async limits(instanceId: string): Promise<PlanEntitlements | undefined> {
+    return this.d.plan?.entitlements(instanceId);
+  }
+
+  /** False once this calendar month's request allowance is used up. */
+  private async accepting(instanceId: string, e: PlanEntitlements | undefined): Promise<boolean> {
+    if (!e || e.maxRequestsPerMonth === Infinity) return true;
+    const used = await this.d.repo.count(COLLECTIONS.tradeIns, { instanceId, _createdDate: { $gte: monthStart(this.now()) } });
+    return used < e.maxRequestsPerMonth;
+  }
+
+  /** Requests used this month and the plan allowance (null = unlimited), for the dashboard. */
+  async monthlyUsage(instanceId: string): Promise<{ used: number; limit: number | null }> {
+    const e = await this.limits(instanceId);
+    const used = await this.d.repo.count(COLLECTIONS.tradeIns, { instanceId, _createdDate: { $gte: monthStart(this.now()) } });
+    return { used, limit: !e || e.maxRequestsPerMonth === Infinity ? null : e.maxRequestsPerMonth };
   }
 
   // ---- Catalog & offer ----------------------------------------------------------
@@ -102,18 +128,23 @@ export class TradeInService {
     requireSiteCaller(ctx);
     const settings = await this.d.settings.get(ctx.instanceId);
     const handoffMethods = publicHandoff(settings);
+    const e = await this.limits(ctx.instanceId);
+    const accepting = await this.accepting(ctx.instanceId, e);
+    const uploads = !e || e.mediaUploads;
     const found = await this.productAndRule(ctx.instanceId, productId);
     const statusPageUrl = settings.pages.statusPageUrl || undefined;
-    if (!found) return { eligible: false, questions: [], media: { photoMinimum: 0, videoMode: 'off', videoMaxSeconds: 0 }, handoffMethods, termsText: settings.termsText, statusPageUrl };
+    if (!found) return { eligible: false, accepting, uploads, questions: [], media: { ...NO_MEDIA }, handoffMethods, termsText: settings.termsText, statusPageUrl };
     const { product, rule } = found;
     return {
       eligible: true,
+      accepting,
+      uploads,
       product: { productId: product.productId, title: product.title, imageUrl: product.imageUrl },
       questions: rule.conditionQuestions.map((q) => ({
         id: q.id, label: q.label, helpText: q.helpText, required: q.required,
         options: q.options.map((o) => ({ id: o.id, label: o.label })),
       })),
-      media: { photoMinimum: rule.photoMinimum, videoMode: rule.videoMode, videoMaxSeconds: rule.videoMaxSeconds },
+      media: uploads ? { photoMinimum: rule.photoMinimum, videoMode: rule.videoMode, videoMaxSeconds: rule.videoMaxSeconds } : { ...NO_MEDIA },
       handoffMethods,
       termsText: settings.termsText,
       upToMinor: maximumPossibleOffer(rule, product.priceMinor),
@@ -135,6 +166,8 @@ export class TradeInService {
   async productCta(ctx: RequestContext, productId: string): Promise<ProductCtaResponse> {
     const found = await this.productAndRule(ctx.instanceId, productId);
     if (!found) return { eligible: false };
+    // No button while the store can't take new requests this month.
+    if (!(await this.accepting(ctx.instanceId, await this.limits(ctx.instanceId)))) return { eligible: false };
     const { pages } = await this.d.settings.get(ctx.instanceId);
     return {
       eligible: true,
@@ -160,6 +193,10 @@ export class TradeInService {
 
   private async createTradeIn(ctx: RequestContext, input: SubmitRequest, memberId: string | undefined): Promise<{ tradeInId: string; reference: string }> {
     const settings = await this.d.settings.get(ctx.instanceId);
+    const e = await this.limits(ctx.instanceId);
+    // Checked inside the idempotent run, so replaying an accepted submission still succeeds.
+    // Two simultaneous last submissions can both pass; the cap is a plan limit, not a hard quota.
+    if (!(await this.accepting(ctx.instanceId, e))) throw new AppError('bad_request', 'monthly request limit reached', { form: 'not_accepting' });
     if (!publicHandoff(settings).some((h) => h.method === input.handoffMethod)) {
       throw new AppError('bad_request', 'handoff disabled', { handoffMethod: 'disabled' });
     }
@@ -179,7 +216,9 @@ export class TradeInService {
       throw new AppError('bad_request', 'below minimum credit', { answers: 'below_minimum' });
     }
 
-    const mediaRequirements = { photoMinimum: rule.photoMinimum, videoMode: rule.videoMode, videoMaxSeconds: rule.videoMaxSeconds };
+    const uploads = !e || e.mediaUploads;
+    if (!uploads && input.mediaIds.length) throw new AppError('bad_request', 'uploads not available', { media: 'not_available' });
+    const mediaRequirements = uploads ? { photoMinimum: rule.photoMinimum, videoMode: rule.videoMode, videoMaxSeconds: rule.videoMaxSeconds } : { ...NO_MEDIA };
     const media = await this.d.media.validateForSubmission(ctx.instanceId, input.uploadSessionId, input.mediaIds, mediaRequirements);
 
     let doc: TradeInDoc | undefined;

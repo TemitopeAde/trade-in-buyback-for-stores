@@ -102,6 +102,41 @@ describe('TradeInFormWidget', () => {
     expect(screen.queryByLabelText(/Phone/)).toBeNull();
   });
 
+  it('skips the photo step when uploads are not on the store plan', async () => {
+    history.replaceState(null, '', '/?product=p1');
+    respond({
+      '/api/catalog/order-items': [],
+      '/api/catalog/search': [],
+      '/api/trade-ins/form-config': {
+        eligible: true, accepting: true, uploads: false, product: { productId: 'p1', title: 'Phone' }, questions: [],
+        media: { photoMinimum: 0, videoMode: 'off', videoMaxSeconds: 0 },
+        handoffMethods: [{ method: 'drop_off' }], termsText: 'Terms apply', currency: 'USD',
+      },
+      '/api/trade-ins/estimate': { eligible: true, offerMinor: 5000, currency: 'USD', complete: true },
+    });
+    render(<TradeInFormWidget />);
+    await screen.findAllByText('Phone');
+    for (let i = 0; i < 2; i++) await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Continue' })));
+    expect(await screen.findByRole('checkbox', { name: /I accept the trade-in terms/ })).toBeTruthy();
+    expect(screen.getAllByRole('listitem').length).toBe(3);
+  });
+
+  it('tells shoppers when the store is not accepting new trade-ins', async () => {
+    history.replaceState(null, '', '/?product=p1');
+    respond({
+      '/api/catalog/order-items': [],
+      '/api/catalog/search': [],
+      '/api/trade-ins/form-config': {
+        eligible: true, accepting: false, uploads: false, product: { productId: 'p1', title: 'Phone' }, questions: [],
+        media: { photoMinimum: 0, videoMode: 'off', videoMaxSeconds: 0 }, handoffMethods: [{ method: 'drop_off' }], termsText: '',
+      },
+    });
+    render(<TradeInFormWidget />);
+    expect(await screen.findByText('We’re not accepting new trade-ins right now. Please check back later.')).toBeTruthy();
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Continue' })));
+    expect(screen.queryByRole('checkbox', { name: /I accept the trade-in terms/ })).toBeNull();
+  });
+
   it('supports infinite scrolling and pagination in product picker', async () => {
     respond({
       '/api/catalog/order-items': [],

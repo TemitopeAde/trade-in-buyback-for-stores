@@ -41,6 +41,12 @@ export function OverviewPage() {
             <Sparkles className="size-5 text-purple-100 mt-0.5 shrink-0" aria-hidden="true" />
             <div>
               <p className="text-sm font-semibold text-white">{t('dash.plan.basicBadge')}</p>
+              {data?.usage.limit != null && (
+                <p className="text-xs font-medium text-white mt-0.5">
+                  {t('dash.plan.usage', { used: data.usage.used, limit: data.usage.limit })}
+                  {data.usage.used >= data.usage.limit && <> {t('dash.plan.limitReached')}</>}
+                </p>
+              )}
               <p className="text-xs text-purple-100 mt-0.5">{t('dash.plan.upgradePrompt')}</p>
             </div>
           </div>

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { formatDateTime } from '../../lib/i18n';
+import { emailAllowed } from '../../lib/plans';
 import { NOTIFICATION_EVENTS, type Settings } from '../../lib/schemas/domain';
 import { AdminApiError, adminApi, type NotificationLogEntry } from '../api';
 import { LoadError, PageHeader } from '../components';
@@ -17,7 +18,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 type Prefs = Settings['notifications'];
 
 export function NotificationsPage() {
-  const { t, errorText } = useDashboard();
+  const { t, errorText, entitlements } = useDashboard();
   const { data, error, loading, reload } = useLoad(() => adminApi.notifications(), []);
   const [prefs, setPrefs] = useState<Prefs>();
   const [saving, setSaving] = useState(false);
@@ -27,6 +28,8 @@ export function NotificationsPage() {
   if (loading || !data || !prefs) return <Skeleton className="h-96" />;
   const me = data.currentUserId;
   const isMe = prefs.staffUserIds.includes(me);
+  const recipientsFull = prefs.staffUserIds.length >= entitlements.maxStaffRecipients;
+  const limitedEmails = entitlements.customerEmails !== 'all' || entitlements.merchantEmails !== 'all';
 
   const save = async (next: Prefs) => {
     setSaving(true);
@@ -44,11 +47,13 @@ export function NotificationsPage() {
     <div className="grid gap-3 sm:grid-cols-2">
       {NOTIFICATION_EVENTS[kind].map((ev) => {
         const id = `n-${kind}-${ev}`;
-        const checked = (prefs[kind] as Record<string, boolean>)[ev];
+        const allowed = emailAllowed(entitlements, kind, ev);
+        const checked = allowed && (prefs[kind] as Record<string, boolean>)[ev];
         return (
           <div key={ev} className="flex items-center gap-3">
-            <Switch id={id} checked={checked} onCheckedChange={(v) => setPrefs({ ...prefs, [kind]: { ...prefs[kind], [ev]: v } })} />
+            <Switch id={id} checked={checked} disabled={!allowed} onCheckedChange={(v) => setPrefs({ ...prefs, [kind]: { ...prefs[kind], [ev]: v } })} />
             <Label htmlFor={id}>{t(`dash.notif.event.${ev}`)}</Label>
+            {!allowed && <Badge variant="info">{t('dash.plan.proOnly')}</Badge>}
           </div>
         );
       })}
@@ -61,12 +66,14 @@ export function NotificationsPage() {
       <Card>
         <CardHeader>
           <CardTitle>{t('dash.notif.recipients')}</CardTitle>
-          <CardDescription>{t('dash.notif.recipientsHelp')} · {t('dash.notif.count', { count: prefs.staffUserIds.length })}</CardDescription>
+          <CardDescription>
+            {t('dash.notif.recipientsHelp')} · {t('dash.notif.count', { count: prefs.staffUserIds.length })} · {t('dash.plan.recipientLimit', { count: entitlements.maxStaffRecipients })}
+          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3">
           {prefs.staffUserIds.length === 0 && <Alert variant="warning">{t('dash.notif.noRecipients')}</Alert>}
           <div>
-            <Button variant="outline" busy={saving} onClick={() => save({ ...prefs, staffUserIds: isMe ? prefs.staffUserIds.filter((u) => u !== me) : [...prefs.staffUserIds, me] })}>
+            <Button variant="outline" busy={saving} disabled={!isMe && recipientsFull} onClick={() => save({ ...prefs, staffUserIds: isMe ? prefs.staffUserIds.filter((u) => u !== me) : [...prefs.staffUserIds, me] })}>
               {isMe ? t('dash.notif.removeMe') : t('dash.notif.addMe')}
             </Button>
           </div>
@@ -75,10 +82,12 @@ export function NotificationsPage() {
       <Card>
         <CardHeader><CardTitle>{t('dash.notif.sender')}</CardTitle></CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
-          <Field label={t('dash.notif.senderName')} htmlFor="n-sender"><Input id="n-sender" maxLength={100} value={prefs.senderName} onChange={(e) => setPrefs({ ...prefs, senderName: e.target.value })} /></Field>
-          <Field label={t('dash.notif.replyTo')} htmlFor="n-reply"><Input id="n-reply" type="email" value={prefs.replyToEmail} onChange={(e) => setPrefs({ ...prefs, replyToEmail: e.target.value.trim() })} /></Field>
+          {!entitlements.customSender && <Alert variant="info" className="sm:col-span-2">{t('dash.plan.senderRequiresPro')}</Alert>}
+          <Field label={t('dash.notif.senderName')} htmlFor="n-sender"><Input id="n-sender" maxLength={100} disabled={!entitlements.customSender} value={prefs.senderName} onChange={(e) => setPrefs({ ...prefs, senderName: e.target.value })} /></Field>
+          <Field label={t('dash.notif.replyTo')} htmlFor="n-reply"><Input id="n-reply" type="email" disabled={!entitlements.customSender} value={prefs.replyToEmail} onChange={(e) => setPrefs({ ...prefs, replyToEmail: e.target.value.trim() })} /></Field>
         </CardContent>
       </Card>
+      {limitedEmails && <Alert variant="info">{t('dash.plan.emailsLimited')}</Alert>}
       <Card><CardHeader><CardTitle>{t('dash.notif.merchantEvents')}</CardTitle></CardHeader><CardContent>{toggles('merchant')}</CardContent></Card>
       <Card><CardHeader><CardTitle>{t('dash.notif.customerEvents')}</CardTitle></CardHeader><CardContent>{toggles('customer')}</CardContent></Card>
       <Card>

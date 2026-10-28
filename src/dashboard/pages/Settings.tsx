@@ -13,12 +13,18 @@ import { Alert, Skeleton } from '../ui/misc';
 import { Switch } from '../ui/switch';
 
 // Defined at module level so it isn't remounted on every render (keeps keyboard focus).
-function Toggle({ id, label, checked, onChange }: { id: string; label: string; checked: boolean; onChange: (v: boolean) => void }) {
-  return <div className="flex items-center gap-3"><Switch id={id} checked={checked} onCheckedChange={onChange} /><Label htmlFor={id}>{label}</Label></div>;
+function Toggle({ id, label, checked, onChange, disabledNote }: { id: string; label: string; checked: boolean; onChange: (v: boolean) => void; disabledNote?: string }) {
+  return (
+    <div className="flex items-center gap-3">
+      <Switch id={id} checked={checked} disabled={!!disabledNote} onCheckedChange={onChange} aria-describedby={disabledNote ? `${id}-plan` : undefined} />
+      <Label htmlFor={id}>{label}</Label>
+      {disabledNote && <span id={`${id}-plan`} className="text-xs text-muted-foreground">{disabledNote}</span>}
+    </div>
+  );
 }
 
 export function SettingsPage() {
-  const { t, errorText } = useDashboard();
+  const { t, errorText, entitlements } = useDashboard();
   const { data, error, loading, reload } = useLoad(() => adminApi.settings(), []);
   const [draft, setDraft] = useState<Settings>();
   const [saving, setSaving] = useState(false);
@@ -30,7 +36,9 @@ export function SettingsPage() {
   const s = draft;
   const patch = (fn: (d: Settings) => Settings) => setDraft((d) => (d ? fn(structuredClone(d)) : d));
   const fieldErr = (path: string) => (errors[path] ? t('dash.saveError') : undefined);
-  const handoffMissing = !s.handoff.dropOff.enabled && !s.handoff.shipIn.enabled;
+  // Saved values are kept across plan changes; the form shows what applies on the current plan.
+  const methodOn = (m: 'dropOff' | 'shipIn') => s.handoff[m].enabled && (m !== 'shipIn' || entitlements.shipIn);
+  const handoffMissing = !methodOn('dropOff') && !methodOn('shipIn');
 
   const save = async () => {
     setSaving(true);
@@ -57,8 +65,14 @@ export function SettingsPage() {
           {(['dropOff', 'shipIn'] as const).map((m) => (
             <fieldset key={m} className="grid gap-3">
               <legend className="sr-only">{t(`dash.settings.${m}`)}</legend>
-              <Toggle id={`h-${m}`} label={t(`dash.settings.${m}`)} checked={s.handoff[m].enabled} onChange={(v) => patch((d) => { d.handoff[m].enabled = v; return d; })} />
-              {s.handoff[m].enabled && (
+              <Toggle
+                id={`h-${m}`}
+                label={t(`dash.settings.${m}`)}
+                checked={methodOn(m)}
+                onChange={(v) => patch((d) => { d.handoff[m].enabled = v; return d; })}
+                disabledNote={m === 'shipIn' && !entitlements.shipIn ? t('dash.plan.shipInRequiresPro') : undefined}
+              />
+              {methodOn(m) && (
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field label={t('dash.settings.address')} htmlFor={`h-${m}-addr`} error={fieldErr(`handoff.${m}.address`)}>
                     <Textarea id={`h-${m}-addr`} value={s.handoff[m].address} maxLength={500} onChange={(e) => patch((d) => { d.handoff[m].address = e.target.value; return d; })} />
@@ -118,8 +132,20 @@ export function SettingsPage() {
           <Field label={t('dash.settings.revisedExpiry')} htmlFor="s-rexp">
             <Input id="s-rexp" type="number" min={1} max={60} value={s.revisedOfferExpiryDays} onChange={(e) => patch((d) => { d.revisedOfferExpiryDays = Number(e.target.value); return d; })} />
           </Field>
-          <Field label={t('dash.settings.retention')} htmlFor="s-ret" help={t('dash.settings.retentionHelp')}>
-            <Input id="s-ret" type="number" min={1} max={365} value={s.mediaRetentionDays} onChange={(e) => patch((d) => { d.mediaRetentionDays = Number(e.target.value); return d; })} />
+          <Field
+            label={t('dash.settings.retention')}
+            htmlFor="s-ret"
+            help={`${t('dash.settings.retentionHelp')} ${entitlements.customMediaRetention ? t('dash.plan.retentionMax', { days: entitlements.maxMediaRetentionDays }) : t('dash.plan.retentionFixed', { days: entitlements.maxMediaRetentionDays })}`}
+          >
+            <Input
+              id="s-ret"
+              type="number"
+              min={1}
+              max={entitlements.maxMediaRetentionDays}
+              disabled={!entitlements.customMediaRetention}
+              value={entitlements.customMediaRetention ? s.mediaRetentionDays : entitlements.maxMediaRetentionDays}
+              onChange={(e) => patch((d) => { d.mediaRetentionDays = Number(e.target.value); return d; })}
+            />
           </Field>
           <Field label={t('dash.settings.locale')} htmlFor="s-locale">
             <NativeSelect id="s-locale" value={s.defaultLocale} onChange={(e) => patch((d) => { d.defaultLocale = e.target.value; return d; })}>

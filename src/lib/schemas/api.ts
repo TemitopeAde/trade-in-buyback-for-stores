@@ -75,6 +75,10 @@ export type PublicQuestion = { id: string; label: string; helpText?: string; req
 
 export type FormConfig = {
   eligible: boolean;
+  /** False when the store has used this month's trade-in requests on its plan. */
+  accepting: boolean;
+  /** Photo/video uploads are available on the store's plan. */
+  uploads: boolean;
   product?: { productId: string; title: string; imageUrl?: string };
   questions: PublicQuestion[];
   media: { photoMinimum: number; videoMode: VideoMode; videoMaxSeconds: number };

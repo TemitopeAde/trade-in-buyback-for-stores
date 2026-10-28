@@ -10,8 +10,16 @@ import {
   type PlanTier,
 } from '../../lib/plans';
 
-export class PlanService {
+import { AppError } from '../errors';
+
+const CACHE_MS = 60_000;
+
+/** What the rest of the server needs from the plan; tests pass a fixed implementation. */
+export type PlanLimits = { entitlements(instanceId: string): Promise<PlanEntitlements> };
+
+export class PlanService implements PlanLimits {
   private readonly mockPlans = new Map<string, PlanTier>();
+  private readonly cache = new Map<string, { plan: PlanTier; at: number }>();
 
   /** Used by tests to override plan tier for an instance. */
   setMockPlan(instanceId: string, plan: PlanTier): void {
@@ -20,6 +28,34 @@ export class PlanService {
 
   clearMockPlan(instanceId: string): void {
     this.mockPlans.delete(instanceId);
+  }
+
+  /**
+   * Entitlements for enforcement. Cached briefly so a burst of requests or outbox events makes
+   * one Wix call. When the lookup fails it uses the last known plan, and with none it throws
+   * (retryable) rather than silently treating a paying site as basic.
+   */
+  async entitlements(instanceId: string): Promise<PlanEntitlements> {
+    const mock = this.mockPlans.get(instanceId);
+    if (mock) return getPlanEntitlements(mock);
+    const hit = this.cache.get(instanceId);
+    if (hit && Date.now() - hit.at < CACHE_MS) return getPlanEntitlements(hit.plan);
+    try {
+      return getPlanEntitlements((await this.fetchInstance(instanceId)).plan);
+    } catch {
+      if (hit) return getPlanEntitlements(hit.plan);
+      throw new AppError('unavailable', 'plan lookup failed');
+    }
+  }
+
+  private async fetchInstance(instanceId: string) {
+    const elevatedGet = auth.elevate(appInstances.getAppInstance);
+    const res = await elevatedGet();
+    const instance = res?.instance;
+    const isFree = instance?.isFree !== false;
+    const plan: PlanTier = isFree ? 'basic' : normalizePlanTier(instance?.billing?.packageName ?? 'pro');
+    this.cache.set(instanceId, { plan, at: Date.now() });
+    return { instance, isFree, plan };
   }
 
   async getPlanStatus(instanceId: string): Promise<InstancePlanStatus> {
@@ -39,13 +75,7 @@ export class PlanService {
     }
 
     try {
-      const elevatedGet = auth.elevate(appInstances.getAppInstance);
-      const res = await elevatedGet();
-      const instance = res?.instance;
-
-      const isFree = instance?.isFree !== false;
-      const rawPackage = instance?.billing?.packageName;
-      const plan: PlanTier = isFree ? 'basic' : normalizePlanTier(rawPackage ?? 'pro');
+      const { instance, isFree, plan } = await this.fetchInstance(instanceId);
       const freeTrialAvailable = instance?.freeTrialAvailable ?? isFree;
 
       return {

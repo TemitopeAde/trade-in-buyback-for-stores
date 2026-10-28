@@ -1,0 +1,189 @@
+{
+  "cta": {
+    "size": [
+      1020,
+      640
+    ],
+    "rects": {
+      "Trade in": [
+        532,
+        405,
+        448,
+        44
+      ],
+      "Add to cart": [
+        532,
+        339,
+        448,
+        53
+      ]
+    }
+  },
+  "cta-open": {
+    "size": [
+      1020,
+      760
+    ],
+    "rects": {}
+  },
+  "form-none": {
+    "size": [
+      1020,
+      1040
+    ],
+    "rects": {
+      "Yes, fully working": [
+        219,
+        532,
+        189,
+        50
+      ],
+      "Light wear": [
+        416,
+        635,
+        189,
+        50
+      ]
+    }
+  },
+  "form-works": {
+    "size": [
+      1020,
+      1040
+    ],
+    "rects": {
+      "Yes, fully working": [
+        219,
+        532,
+        189,
+        50
+      ],
+      "Light wear": [
+        416,
+        635,
+        189,
+        50
+      ]
+    }
+  },
+  "form-all": {
+    "size": [
+      1020,
+      1040
+    ],
+    "rects": {
+      "Light wear": [
+        416,
+        635,
+        189,
+        50
+      ],
+      "Estimated credit": [
+        244,
+        792,
+        532,
+        21
+      ],
+      "Continue": [
+        696,
+        958,
+        105,
+        44
+      ]
+    }
+  },
+  "form-brand": {
+    "size": [
+      1020,
+      1040
+    ],
+    "rects": {}
+  },
+  "panel-light": {
+    "size": [
+      300,
+      760
+    ],
+    "rects": {}
+  },
+  "panel-brand": {
+    "size": [
+      300,
+      760
+    ],
+    "rects": {}
+  },
+  "dash-detail": {
+    "size": [
+      1180,
+      1000
+    ],
+    "rects": {
+      "Confirm value & issue credit": [
+        837,
+        209,
+        298,
+        36
+      ],
+      "Estimate breakdown": [
+        289,
+        499,
+        482,
+        16
+      ],
+      "Being inspected": [
+        854,
+        789,
+        281,
+        20
+      ]
+    }
+  },
+  "dash-credit": {
+    "size": [
+      1180,
+      1000
+    ],
+    "rects": {
+      "Credit issued": [
+        854,
+        685,
+        281,
+        20
+      ],
+      "Gift card issued": [
+        672,
+        1209,
+        99,
+        20
+      ]
+    }
+  },
+  "status-credit": {
+    "size": [
+      390,
+      844
+    ],
+    "rects": {}
+  },
+  "dash-overview": {
+    "size": [
+      1180,
+      900
+    ],
+    "rects": {
+      "$1,843.00": [
+        745,
+        471,
+        390,
+        32
+      ],
+      "Credit issued": [
+        745,
+        439,
+        390,
+        16
+      ]
+    }
+  }
+}

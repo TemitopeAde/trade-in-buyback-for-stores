@@ -20,6 +20,7 @@ import type { RulesService } from './RulesService';
 import type { SettingsService } from './SettingsService';
 import type { TradeInLifecycleService } from './TradeInLifecycleService';
 import type { TradeInMediaService } from './TradeInMediaService';
+import type { PlanLimits } from './PlanService';
 
 // Dashboard-side workflows. Callers have already passed requireMerchant(); every query and
 // mutation is scoped to the caller's instance.
@@ -33,6 +34,8 @@ type Deps = {
   catalogVersion: (instanceId: string) => Promise<string>;
   giftCardsAvailable?: () => Promise<boolean>;
   pluginPlaced?: () => Promise<boolean>;
+  /** Plan limits (revised offers). Omitted = unlimited. */
+  plan?: PlanLimits;
   now?: () => Date;
 };
 
@@ -108,12 +111,19 @@ export class MerchantService {
       notes: (doc.internalNotes ?? []).map((n) => ({ id: n.id, text: n.text, createdAt: n.createdAt })),
       media: media.map((m) => ({ mediaId: m.mediaId, kind: m.kind, status: m.status, url: m.url })),
       timeline: events.map(toTimeline),
-      actions: merchantActions(doc),
+      actions: merchantActions(doc, await this.revisedOffersAllowed(instanceId)),
     };
+  }
+
+  private async revisedOffersAllowed(instanceId: string): Promise<boolean> {
+    return !this.d.plan || (await this.d.plan.entitlements(instanceId)).revisedOffers;
   }
 
   /** Validates action-specific input and applies the transition with its field changes. */
   async act(instanceId: string, actor: Actor, req: AdminActionRequest): Promise<AdminTradeInDetail> {
+    if (req.action === 'send_revised_offer' && !(await this.revisedOffersAllowed(instanceId))) {
+      throw new AppError('forbidden', 'revised_offer_requires_pro');
+    }
     const doc = await this.d.lifecycle.load(instanceId, req.tradeInId);
     const settings = await this.d.settings.get(instanceId);
     const patch: Partial<TradeInDoc> = {};
@@ -190,7 +200,7 @@ export class MerchantService {
     return this.detail(instanceId, tradeInId);
   }
 
-  async overview(instanceId: string): Promise<OverviewResponse> {
+  async overview(instanceId: string): Promise<Omit<OverviewResponse, 'usage'>> {
     const groups = Object.keys(STATUS_GROUPS) as (keyof typeof STATUS_GROUPS)[];
     const counts = Object.fromEntries(
       await Promise.all(groups.map(async (g) => [g, await this.d.repo.count(COLLECTIONS.tradeIns, { instanceId, status: { $in: STATUS_GROUPS[g] } })] as const)),
@@ -269,8 +279,8 @@ function toTimeline(e: TradeInEventDoc): AdminTimelineEntry {
   };
 }
 
-export function merchantActions(doc: { status: TradeInStatus; handoffMethod: string; revisedValueMinor?: number }): MerchantAction[] {
+export function merchantActions(doc: { status: TradeInStatus; handoffMethod: string; revisedValueMinor?: number }, revisedOffers = true): MerchantAction[] {
   return availableActions(doc.status, 'merchant').filter((a): a is MerchantAction =>
-    (MERCHANT_ACTIONS as readonly string[]).includes(a) && (a !== 'mark_in_transit' || doc.handoffMethod === 'ship_in'),
+    (MERCHANT_ACTIONS as readonly string[]).includes(a) && (a !== 'mark_in_transit' || doc.handoffMethod === 'ship_in') && (a !== 'send_revised_offer' || revisedOffers),
   );
 }
