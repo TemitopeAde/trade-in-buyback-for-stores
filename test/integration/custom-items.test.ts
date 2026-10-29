@@ -18,6 +18,7 @@ import { MemoryRepo } from '../support/memoryRepo';
 
 const I = 'inst-1';
 const visitor: RequestContext = { instanceId: I, siteId: 's', caller: { type: 'visitor', id: 'v1' } };
+const member: RequestContext = { instanceId: I, siteId: 's', caller: { type: 'member', id: 'm1' } };
 const merchantActor = { type: 'merchant' as const, id: 'u1' };
 const SESSION = 'S'.repeat(43);
 let n = 0;
@@ -78,7 +79,7 @@ describe('custom items', () => {
 
   it('is off until the merchant enables it', async () => {
     expect((await s.customer.customItemConfig(visitor)).eligible).toBe(false);
-    await expect(s.customer.submit(visitor, request())).rejects.toMatchObject({ fields: { customItem: 'disabled' } });
+    await expect(s.customer.submit(member, request())).rejects.toMatchObject({ fields: { customItem: 'disabled' } });
   });
 
   it('stores a custom item with no estimate, using the site currency and photo minimum', async () => {
@@ -86,9 +87,9 @@ describe('custom items', () => {
     const config = await s.customer.customItemConfig(visitor);
     expect(config).toMatchObject({ eligible: true, custom: true, questions: [], currency: 'EUR', media: { photoMinimum: 1, videoMode: 'off' } });
 
-    await expect(s.customer.submit(visitor, request())).rejects.toMatchObject({ fields: { media: 'photos_min' } });
+    await expect(s.customer.submit(member, request())).rejects.toMatchObject({ fields: { media: 'photos_min' } });
     const photo = await seedPhoto(s.repo);
-    const res = await s.customer.submit(visitor, request({ mediaIds: [photo._id] }));
+    const res = await s.customer.submit(member, request({ mediaIds: [photo._id] }));
     const doc = (await s.repo.get<TradeInDoc>(COLLECTIONS.tradeIns, res.tradeInId))!;
     expect(doc).toMatchObject({
       productId: '', productTitle: 'Velo Road bike', estimatedValueMinor: 0, currency: 'EUR', status: 'submitted', conditionAnswers: {},
@@ -102,7 +103,7 @@ describe('custom items', () => {
 
   it('is quoted instead of approved; accepting the quote approves it at that value', async () => {
     await enableCustomItems(s.settings, 0);
-    const res = await s.customer.submit(visitor, request());
+    const res = await s.customer.submit(member, request());
     let d = await s.merchant.detail(I, res.tradeInId);
     expect(d.custom).toBe(true);
     expect(d.actions).toContain('send_quote');
@@ -134,7 +135,7 @@ describe('custom items', () => {
 
   it('closes the request when the customer declines the quote', async () => {
     await enableCustomItems(s.settings, 0);
-    const res = await s.customer.submit(visitor, request());
+    const res = await s.customer.submit(member, request());
     const d = await s.merchant.act(I, merchantActor, { tradeInId: res.tradeInId, action: 'send_quote', expectedRevision: 1, idempotencyKey: key(), quotedValueMinor: 100_00 });
     const view = await s.customer.customerAction(visitor, { token: res.accessToken, action: 'decline_quote', expectedRevision: d.revision, idempotencyKey: key() });
     expect(view.status).toBe('cancelled');
@@ -142,7 +143,7 @@ describe('custom items', () => {
 
   it('expires an overdue quote on the next read', async () => {
     await enableCustomItems(s.settings, 0);
-    const res = await s.customer.submit(visitor, request());
+    const res = await s.customer.submit(member, request());
     await s.merchant.act(I, merchantActor, { tradeInId: res.tradeInId, action: 'send_quote', expectedRevision: 1, idempotencyKey: key(), quotedValueMinor: 100_00 });
     const doc = (await s.repo.get<TradeInDoc>(COLLECTIONS.tradeIns, res.tradeInId))!;
     await s.repo.update(COLLECTIONS.tradeIns, { ...doc, quoteExpiresAt: new Date('2000-01-01') });

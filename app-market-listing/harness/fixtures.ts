@@ -4,6 +4,7 @@
 import type { CatalogItem, CustomerTradeInView, FormConfig, MyTradeInsResponse } from '../../src/lib/schemas/api';
 import type { AdminListResponse, AdminTradeInDetail, AdminTradeInRow, OverviewResponse } from '../../src/lib/schemas/admin';
 import { PLAN_ENTITLEMENTS, APP_ID } from '../../src/lib/plans';
+import { defaultSettings } from '../../src/lib/schemas/domain';
 
 const img = (name: string) => `${location.origin}/img/${name}.svg`;
 const daysAgo = (d: number, h = 10) => {
@@ -205,6 +206,17 @@ const routes: Record<string, Handler> = {
   '/api/admin/process': () => ({ done: 0, failed: 0 }),
   '/api/admin/plugin-status': () => ({ placementStatuses: [] }),
   '/api/admin/outbox': () => ({ giftCardsAvailable: true, dead: [] }),
+  '/api/admin/settings': (_q, b) => b?.settings ?? {
+    ...defaultSettings(),
+    handoff: {
+      dropOff: { enabled: true, address: '', instructions: 'Open Mon–Sat, 10am–6pm. Bring the charger and original box if you have them.', location: { country: 'US', line1: '214 Harbor Street', line2: '', city: 'Portland', subdivision: 'OR', postalCode: '97204' } },
+      shipIn: { enabled: true, address: '', instructions: 'Pack the item in a padded box and write your trade-in reference on the outside.', allowTracking: true, location: { country: 'US', line1: '214 Harbor Street', line2: 'Returns dock', city: 'Portland', subdivision: 'OR', postalCode: '97204' } },
+    },
+    credit: { expiryMonths: 24, minimumCreditMinor: 500, sendGiftCardEmail: true },
+    termsHtml: '<h3>Trade-in terms</h3><p>Items must be your own and free of any finance or lock. Offers are confirmed after inspection.</p>',
+    customItems: { enabled: true, photoMinimum: 2 },
+    siteCurrency: 'USD',
+  },
 };
 
 export async function fakeFetch(url: string, init?: { method?: string; body?: string }): Promise<Response> {

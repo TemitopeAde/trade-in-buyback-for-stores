@@ -87,7 +87,7 @@ describe('customer submission', () => {
 
   it('persists a trade-in with a server-computed offer, attaches media and enqueues notification', async () => {
     const photo = await seedPhoto(ctx.repo);
-    const res = await ctx.svc.submit(visitor, request({ mediaIds: [photo._id] }));
+    const res = await ctx.svc.submit(member, request({ mediaIds: [photo._id] }));
     const doc = (await ctx.repo.get<TradeInDoc>(COLLECTIONS.tradeIns, res.tradeInId))!;
     expect(doc).toMatchObject({ status: 'submitted', estimatedValueMinor: 40_00, currency: 'USD', customerEmail: 'ana@example.com', revision: 1 });
     expect(doc.offerBreakdown?.basePriceMinor).toBe(100_00);
@@ -99,34 +99,41 @@ describe('customer submission', () => {
 
   it('is idempotent: a retried submission creates one trade-in', async () => {
     const photo = await seedPhoto(ctx.repo);
-    const a = await ctx.svc.submit(visitor, request({ mediaIds: [photo._id] }));
-    const b = await ctx.svc.submit(visitor, request({ mediaIds: [photo._id] }));
+    const a = await ctx.svc.submit(member, request({ mediaIds: [photo._id] }));
+    const b = await ctx.svc.submit(member, request({ mediaIds: [photo._id] }));
     expect(b.tradeInId).toBe(a.tradeInId);
     expect(ctx.repo.all(COLLECTIONS.tradeIns)).toHaveLength(1);
   });
 
   it('rejects missing evidence, disabled hand-off and unknown answers', async () => {
-    await expect(ctx.svc.submit(visitor, request())).rejects.toMatchObject({ fields: { media: 'photos_min' } });
+    await expect(ctx.svc.submit(member, request())).rejects.toMatchObject({ fields: { media: 'photos_min' } });
     const photo = await seedPhoto(ctx.repo);
-    await expect(ctx.svc.submit(visitor, request({ submissionKey: 'submission-key-0002', mediaIds: [photo._id], handoffMethod: 'ship_in' }))).rejects.toMatchObject({ fields: { handoffMethod: 'disabled' } });
-    await expect(ctx.svc.submit(visitor, request({ submissionKey: 'submission-key-0003', mediaIds: [photo._id], answers: { screen: 'mint' } }))).rejects.toMatchObject({ code: 'bad_request' });
+    await expect(ctx.svc.submit(member, request({ submissionKey: 'submission-key-0002', mediaIds: [photo._id], handoffMethod: 'ship_in' }))).rejects.toMatchObject({ fields: { handoffMethod: 'disabled' } });
+    await expect(ctx.svc.submit(member, request({ submissionKey: 'submission-key-0003', mediaIds: [photo._id], answers: { screen: 'mint' } }))).rejects.toMatchObject({ code: 'bad_request' });
   });
 
   it('refuses media from another upload session or instance', async () => {
     const foreign = await seedPhoto(ctx.repo, { uploadSessionId: 'T'.repeat(43) });
-    await expect(ctx.svc.submit(visitor, request({ mediaIds: [foreign._id] }))).rejects.toMatchObject({ code: 'not_found' });
+    await expect(ctx.svc.submit(member, request({ mediaIds: [foreign._id] }))).rejects.toMatchObject({ code: 'not_found' });
+  });
+
+  it('requires a signed-in member to submit', async () => {
+    const photo = await seedPhoto(ctx.repo);
+    await expect(ctx.svc.submit(visitor, request({ mediaIds: [photo._id] }))).rejects.toMatchObject({ code: 'unauthorized', fields: { form: 'sign_in_required' } });
+    expect(ctx.repo.all(COLLECTIONS.tradeIns)).toHaveLength(0);
   });
 
   it('only accepts past orders owned by the signed-in member', async () => {
     const photo = await seedPhoto(ctx.repo);
-    await expect(ctx.svc.submit(visitor, request({ orderId: 'o1', mediaIds: [photo._id] }))).rejects.toMatchObject({ fields: { orderId: 'invalid' } });
+    const otherMember: RequestContext = { ...member, caller: { type: 'member', id: 'm2' } };
+    await expect(ctx.svc.submit(otherMember, request({ orderId: 'o1', mediaIds: [photo._id] }))).rejects.toMatchObject({ fields: { orderId: 'invalid' } });
     const res = await ctx.svc.submit(member, request({ submissionKey: 'submission-key-0009', orderId: 'o1', mediaIds: [photo._id] }));
     expect((await ctx.repo.get<TradeInDoc>(COLLECTIONS.tradeIns, res.tradeInId))!.memberId).toBe('m1');
   });
 
   it('lets the customer view by token but not another visitor without it', async () => {
     const photo = await seedPhoto(ctx.repo);
-    const res = await ctx.svc.submit(visitor, request({ mediaIds: [photo._id] }));
+    const res = await ctx.svc.submit(member, request({ mediaIds: [photo._id] }));
     const view = await ctx.svc.getForCustomer({ ...visitor, caller: { type: 'visitor', id: 'other' } }, { token: res.accessToken });
     expect(view).toMatchObject({ reference: res.reference, status: 'submitted' });
     expect(view.handoff.address).toBeUndefined(); // not shown before approval
@@ -135,7 +142,7 @@ describe('customer submission', () => {
 
   it('expires an overdue revised offer on the next read', async () => {
     const photo = await seedPhoto(ctx.repo);
-    const res = await ctx.svc.submit(visitor, request({ mediaIds: [photo._id] }));
+    const res = await ctx.svc.submit(member, request({ mediaIds: [photo._id] }));
     const doc = (await ctx.repo.get<TradeInDoc>(COLLECTIONS.tradeIns, res.tradeInId))!;
     await ctx.repo.update(COLLECTIONS.tradeIns, { ...doc, status: 'revised_offer_pending', revisedValueMinor: 10_00, revisedOfferExpiresAt: new Date('2000-01-01') });
     const view = await ctx.svc.getForCustomer(visitor, { token: res.accessToken });
@@ -179,7 +186,7 @@ describe('trade-in terms', () => {
     await ctx.settings.save(INSTANCE, { ...defaultSettings(), termsHtml: '<p><br></p>' });
     expect((await ctx.svc.formConfig(visitor, 'p1')).accepting).toBe(false);
     expect(await ctx.svc.productCta(visitor, 'p1')).toEqual({ eligible: false, accepting: false });
-    await expect(ctx.svc.submit(visitor, request())).rejects.toMatchObject({ fields: { form: 'not_accepting' } });
+    await expect(ctx.svc.submit(member, request())).rejects.toMatchObject({ fields: { form: 'not_accepting' } });
     expect((await ctx.merchant.overview(INSTANCE)).setup.termsConfigured).toBe(false);
 
     await ctx.settings.save(INSTANCE, { ...defaultSettings(), termsHtml: TERMS });
@@ -191,7 +198,7 @@ describe('trade-in terms', () => {
     const ctx = await setup();
     await seedRule(ctx.rules);
     const photo = await seedPhoto(ctx.repo);
-    const { tradeInId } = await ctx.svc.submit(visitor, request({ mediaIds: [photo._id] }));
+    const { tradeInId } = await ctx.svc.submit(member, request({ mediaIds: [photo._id] }));
     await ctx.settings.save(INSTANCE, { ...defaultSettings(), termsHtml: '<p>New terms</p>' });
     const doc = (await ctx.repo.get<TradeInDoc>(COLLECTIONS.tradeIns, tradeInId))!;
     expect(doc.termsHtml).toBe(TERMS);
@@ -223,10 +230,10 @@ describe('plan limits on submission', () => {
     await seedRule(ctx.rules);
     const config = await ctx.svc.formConfig(visitor, 'p1');
     expect(config).toMatchObject({ accepting: true, uploads: false, media: { photoMinimum: 0, videoMode: 'off' } });
-    await ctx.svc.submit(visitor, request());
+    await ctx.svc.submit(member, request());
     // Replaying the accepted submission still works; a new one is refused.
-    await expect(ctx.svc.submit(visitor, request())).resolves.toBeTruthy();
-    await expect(ctx.svc.submit(visitor, request({ submissionKey: 'submission-key-0002' }))).rejects.toMatchObject({ fields: { form: 'not_accepting' } });
+    await expect(ctx.svc.submit(member, request())).resolves.toBeTruthy();
+    await expect(ctx.svc.submit(member, request({ submissionKey: 'submission-key-0002' }))).rejects.toMatchObject({ fields: { form: 'not_accepting' } });
     expect((await ctx.svc.formConfig(visitor, 'p1')).accepting).toBe(false);
     expect(await ctx.svc.productCta(visitor, 'p1')).toEqual({ eligible: false, accepting: false });
     expect(await ctx.svc.monthlyUsage(INSTANCE)).toEqual({ used: 1, limit: 1 });
@@ -235,7 +242,7 @@ describe('plan limits on submission', () => {
   it('still counts a deleted request toward the monthly allowance', async () => {
     const ctx = await setup('basic');
     await seedRule(ctx.rules);
-    const { tradeInId } = await ctx.svc.submit(visitor, request());
+    const { tradeInId } = await ctx.svc.submit(member, request());
     await ctx.merchant.deleteTradeIn(INSTANCE, { type: 'merchant', id: 'u1' }, tradeInId);
     expect(await ctx.repo.get(COLLECTIONS.tradeIns, tradeInId)).toBeNull();
     expect((await ctx.svc.formConfig(visitor, 'p1')).accepting).toBe(false);
@@ -250,8 +257,8 @@ describe('plan limits on submission', () => {
     st.handoff.shipIn.enabled = true;
     await ctx.settings.save(INSTANCE, st);
     const photo = await seedPhoto(ctx.repo);
-    await expect(ctx.svc.submit(visitor, request({ mediaIds: [photo._id] }))).rejects.toMatchObject({ fields: { media: 'not_available' } });
-    await expect(ctx.svc.submit(visitor, request({ submissionKey: 'submission-key-0002', handoffMethod: 'ship_in' }))).rejects.toMatchObject({ fields: { handoffMethod: 'disabled' } });
+    await expect(ctx.svc.submit(member, request({ mediaIds: [photo._id] }))).rejects.toMatchObject({ fields: { media: 'not_available' } });
+    await expect(ctx.svc.submit(member, request({ submissionKey: 'submission-key-0002', handoffMethod: 'ship_in' }))).rejects.toMatchObject({ fields: { handoffMethod: 'disabled' } });
     // The saved setting is kept for when the store upgrades.
     expect((await ctx.settings.getStored(INSTANCE)).handoff.shipIn.enabled).toBe(true);
   });
