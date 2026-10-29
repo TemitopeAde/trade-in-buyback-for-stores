@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Info, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Adjustment, ConditionQuestion, Rule, RuleInput } from '../../lib/schemas/domain';
 import { ruleInputSchema, VIDEO_MODES } from '../../lib/schemas/domain';
@@ -22,6 +22,7 @@ import { Input, NativeSelect, Textarea } from '../ui/input';
 import { Field, Label } from '../ui/label';
 import { Alert, Skeleton } from '../ui/misc';
 import { Switch } from '../ui/switch';
+import { InfoTip } from '../ui/tooltip';
 
 const shortId = () => Math.random().toString(36).slice(2, 10);
 
@@ -269,7 +270,7 @@ function RuleEditor({ rule, currency, onDone }: { rule?: Rule; currency: string;
                   <Input id="r-vmax" type="number" min={5} max={300} step={1} aria-invalid={!!errors.videoMaxSeconds} value={Number.isFinite(draft.videoMaxSeconds) ? draft.videoMaxSeconds : ''} onChange={(e) => setNumber('videoMaxSeconds', e.target.value)} />
                 </Field>
               )}
-              <Field label={t('dash.rule.priority')} htmlFor="r-prio" labelAfter={<PriorityTooltip text={t('dash.rule.priorityHelp')} />} error={numberError('priority')}>
+              <Field label={t('dash.rule.priority')} htmlFor="r-prio" labelAfter={<InfoTip text={t('dash.rule.priorityHelp')} />} error={numberError('priority')}>
                 <Input id="r-prio" type="number" min={0} max={1000} step={1} aria-invalid={!!errors.priority} value={Number.isFinite(draft.priority) ? draft.priority : ''} onChange={(e) => setNumber('priority', e.target.value)} />
               </Field>
               <div className="flex items-center gap-3 self-end pb-2">
@@ -442,25 +443,5 @@ function SignedMoney({ id, currency, value, onChange }: { id: string; currency: 
       </NativeSelect>
       <MoneyInput id={id} currency={currency} value={Math.abs(value)} onChange={(v) => onChange((v ?? 0) * (negative ? -1 : 1))} />
     </div>
-  );
-}
-
-function PriorityTooltip({ text }: { text: string }) {
-  return (
-    <span className="group relative inline-flex">
-      <button
-        type="button"
-        aria-label={text}
-        className="inline-flex size-5 items-center justify-center rounded-full text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-      >
-        <Info className="size-4" aria-hidden="true" />
-      </button>
-      <span
-        role="tooltip"
-        className="pointer-events-none invisible absolute bottom-full left-1/2 z-50 mb-2 w-64 -translate-x-1/2 rounded-md bg-foreground px-3 py-2 text-xs font-normal text-background opacity-0 shadow-md transition-opacity group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
-      >
-        {text}
-      </span>
-    </span>
   );
 }

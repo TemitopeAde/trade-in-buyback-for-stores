@@ -66,9 +66,21 @@ export type Rule = RuleInput & { _id: string; instanceId: string; version: numbe
 
 // ---- Settings ------------------------------------------------------------
 
+const postalAddressSchema = z.object({
+  country: z.union([z.string().regex(/^[A-Z]{2}$/), z.literal('')]).default(''),
+  line1: plainText(200).default(''),
+  line2: plainText(200).default(''),
+  city: plainText(100).default(''),
+  subdivision: plainText(100).default(''),
+  postalCode: plainText(20).default(''),
+});
+
 const handoffMethodSchema = z.object({
   enabled: z.boolean(),
+  // Display text shown to customers. Built from `location` on save once that has a country and
+  // street; older settings may only have this free text.
   address: plainText(500).default(''),
+  location: postalAddressSchema.optional(),
   instructions: plainText(2000).default(''),
 });
 

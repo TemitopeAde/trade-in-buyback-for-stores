@@ -1,5 +1,5 @@
 // @ts-check
-import { defineConfig } from 'astro/config';
+import { defineConfig, envField } from 'astro/config';
 import { loadEnv } from 'vite';
 import wix from '@wix/astro';
 import react from "@astrojs/react";
@@ -19,6 +19,13 @@ export default defineConfig({
   image: { domains: ["static.wixstatic.com"] },
   security: { checkOrigin: false },
   devToolbar: { enabled: false },
+  env: {
+    schema: {
+      // Geoapify key for dashboard address suggestions (/api/admin/address-suggest only). Set with
+      // `wix env set`; only Astro routes may import it (backend extensions can't use astro:env).
+      AUTOCOMPLETE_API_KEY: envField.string({ context: 'server', access: 'secret', optional: true }),
+    },
+  },
   // Tailwind is only imported by the merchant dashboard stylesheet; widgets use their own scoped CSS.
   vite: { plugins: [tailwindcss()], 
     server: {

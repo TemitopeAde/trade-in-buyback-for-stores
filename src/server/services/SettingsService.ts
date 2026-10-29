@@ -1,6 +1,7 @@
 import { applyPlanToSettings } from '../../lib/plans';
 import { textToHtml } from '../../lib/terms';
 import { defaultSettings, SETTINGS_SCHEMA_VERSION, settingsSchema, type Settings } from '../../lib/schemas/domain';
+import { formatAddress, isCompleteAddress } from '../../lib/location/address';
 import { COLLECTIONS } from '../collections';
 import { AppError } from '../errors';
 import { DuplicateKeyError, type Doc, type Repo } from '../repo';
@@ -41,6 +42,9 @@ export class SettingsService {
   async save(instanceId: string, input: unknown): Promise<Settings> {
     const parsed = settingsSchema.safeParse(input);
     if (!parsed.success) throw new AppError('bad_request', 'invalid settings', flattenIssues(parsed.error.issues));
+    for (const method of [parsed.data.handoff.dropOff, parsed.data.handoff.shipIn]) {
+      if (isCompleteAddress(method.location)) method.address = formatAddress(method.location, parsed.data.defaultLocale);
+    }
     parsed.data.termsHtml = sanitizeTermsHtml(parsed.data.termsHtml);
     const existing = await this.doc(instanceId);
     const record = { instanceId, schemaVersion: SETTINGS_SCHEMA_VERSION, settings: parsed.data, disconnected: false };

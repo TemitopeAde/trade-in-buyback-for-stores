@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasTerms, textToHtml } from '../../src/lib/terms';
+import { DEFAULT_TERMS_HTML, hasTerms, termsEditorValue, textToHtml } from '../../src/lib/terms';
 import { sanitizeTermsHtml } from '../../src/server/sanitizeHtml';
 
 describe('trade-in terms', () => {
@@ -9,6 +9,13 @@ describe('trade-in terms', () => {
     expect(hasTerms('<p><br></p>')).toBe(false);
     expect(hasTerms('<p>&nbsp; </p>')).toBe(false);
     expect(hasTerms('<p>Credit is final.</p>')).toBe(true);
+  });
+
+  it('uses the starter template only when no saved terms are present', () => {
+    expect(termsEditorValue('')).toBe(DEFAULT_TERMS_HTML);
+    expect(termsEditorValue('<p><br></p>')).toBe(DEFAULT_TERMS_HTML);
+    expect(termsEditorValue('<p>My store terms</p>')).toBe('<p>My store terms</p>');
+    expect(hasTerms(DEFAULT_TERMS_HTML)).toBe(true);
   });
 
   it('escapes legacy plain text into paragraphs', () => {

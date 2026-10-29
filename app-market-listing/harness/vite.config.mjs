@@ -16,6 +16,7 @@ export default defineConfig({
     alias: {
       '@wix/essentials': here('./mocks/essentials.ts'),
       '@wix/site-window': here('./mocks/site-window.ts'),
+      '@wix/site-site': here('./mocks/site-site.ts'),
       '@wix/dashboard': here('./mocks/dashboard.ts'),
       '@wix/editor': here('./mocks/editor.ts'),
     },

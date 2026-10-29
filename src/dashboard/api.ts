@@ -15,6 +15,7 @@ export type DeadJob = { id: string; eventType: string; tradeInId?: string; attem
 import type { OfferResult } from '../lib/offer';
 import type { Report } from '../server/services/ReportingService';
 import type { InstancePlanStatus } from '../lib/plans';
+import type { AddressSuggestion } from '../server/services/GeoapifyAutocomplete';
 
 // Dashboard → app backend. fetchWithAuth sends the Wix user's identity; every /api/admin route
 // re-checks that the caller is a dashboard user of this site.
@@ -50,6 +51,8 @@ export const adminApi = {
   act: (body: AdminActionRequest) => call<AdminTradeInDetail>('/api/admin/action', { method: 'POST', body }),
   deleteTradeIn: (id: string) => call<{ ok: true }>('/api/admin/trade-in-delete', { method: 'POST', body: { id } }),
   note: (tradeInId: string, text: string) => call<AdminTradeInDetail>('/api/admin/note', { method: 'POST', body: { tradeInId, text } }),
+  addressSuggest: (q: { text: string; country: string; lang?: string }) =>
+    call<{ suggestions: AddressSuggestion[] }>('/api/admin/address-suggest', { query: q }),
   rules: () => call<Rule[]>('/api/admin/rules'),
   saveRule: (rule: unknown, id?: string) => call<Rule>('/api/admin/rule-save', { method: 'POST', body: { id, rule } }),
   deleteRule: (id: string) => call<{ ok: true }>('/api/admin/rule-delete', { method: 'POST', body: { id } }),
