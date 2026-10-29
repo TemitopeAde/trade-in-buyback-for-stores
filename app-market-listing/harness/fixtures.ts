@@ -148,8 +148,8 @@ const OVERVIEW: OverviewResponse = {
   usage: { used: 28, limit: null },
   recent: DETAIL.timeline.slice().reverse().map((e, i) => ({ ...e, id: `r${i}` })),
   setup: {
-    storesInstalled: true, catalogVersion: 'V3', hasRules: true, settingsSaved: true, termsConfigured: true, formPageConfigured: true,
-    statusPageConfigured: true, pluginPlaced: true, giftCardsAvailable: true, giftCardEmailWorking: true, emailConfigured: true,
+    storesInstalled: true, catalogVersion: 'V3', hasRules: true, settingsSaved: true, termsConfigured: true,
+    pluginPlaced: true, giftCardsAvailable: true, giftCardEmailWorking: true, emailConfigured: true,
   },
 };
 
@@ -181,7 +181,7 @@ type Handler = (q: URLSearchParams, body: any) => unknown;
 const routes: Record<string, Handler> = {
   '/api/catalog/search': (q) => ({ items: CATALOG.filter((c) => c.title.toLowerCase().includes((q.get('q') ?? '').toLowerCase())), hasMore: false }),
   '/api/catalog/order-items': () => ORDER_ITEMS,
-  '/api/catalog/product-cta': () => ({ eligible: true, upToMinor: 9000, currency: 'USD', formPageUrl: '/trade-in' }),
+  '/api/catalog/product-cta': () => ({ eligible: true, upToMinor: 9000, currency: 'USD' }),
   '/api/trade-ins/form-config': (q) => formConfig(q.get('productId') ?? 'p-aero'),
   '/api/trade-ins/estimate': (_q, b) => estimate(b?.answers ?? {}),
   '/api/trade-ins/status': () => (credited ? CREDITED_STATUS : STATUS_VIEW),

@@ -151,8 +151,7 @@ export class TradeInService {
     const accepting = await this.accepting(ctx.instanceId, e, settings);
     const uploads = !e || e.mediaUploads;
     const found = await this.productAndRule(ctx.instanceId, productId);
-    const statusPageUrl = settings.pages.statusPageUrl || undefined;
-    if (!found) return { eligible: false, accepting, uploads, questions: [], media: { ...NO_MEDIA }, handoffMethods, termsHtml: settings.termsHtml, statusPageUrl };
+    if (!found) return { eligible: false, accepting, uploads, questions: [], media: { ...NO_MEDIA }, handoffMethods, termsHtml: settings.termsHtml };
     const { product, rule } = found;
     return {
       eligible: true,
@@ -168,7 +167,6 @@ export class TradeInService {
       termsHtml: settings.termsHtml,
       upToMinor: maximumPossibleOffer(rule, product.priceMinor),
       currency: product.currency,
-      statusPageUrl,
     };
   }
 
@@ -187,7 +185,6 @@ export class TradeInService {
       handoffMethods: publicHandoff(settings),
       termsHtml: settings.termsHtml,
       currency: await this.d.siteCurrency(ctx.instanceId),
-      statusPageUrl: settings.pages.statusPageUrl || undefined,
       custom: true,
     };
   }
@@ -209,12 +206,10 @@ export class TradeInService {
     // `eligible` stays false so nothing can open the form.
     const settings = await this.d.settings.get(ctx.instanceId);
     if (!(await this.accepting(ctx.instanceId, await this.limits(ctx.instanceId), settings))) return { eligible: false, accepting: false };
-    const { pages } = settings;
     return {
       eligible: true,
       upToMinor: maximumPossibleOffer(found.rule, found.product.priceMinor),
       currency: found.product.currency,
-      formPageUrl: pages.formPageUrl || undefined,
     };
   }
 
@@ -223,6 +218,8 @@ export class TradeInService {
   async submit(ctx: RequestContext, input: SubmitRequest): Promise<SubmitResponse> {
     requireSiteCaller(ctx);
     const memberId = memberIdOf(ctx);
+    // Trade-ins belong to a site member, who follows them in the member widgets.
+    if (!memberId) throw new AppError('unauthorized', 'sign in required', { form: 'sign_in_required' });
     const created = await this.d.idempotency.run(
       { instanceId: ctx.instanceId, operation: 'submit', key: input.submissionKey, payload: { ...input, caller: ctx.caller.id } },
       () => this.createTradeIn(ctx, input, memberId),
@@ -401,9 +398,7 @@ export class TradeInService {
 
   async listForMember(ctx: RequestContext, cursor: number): Promise<MyTradeInsResponse> {
     const memberId = memberIdOf(ctx);
-    const { pages } = await this.d.settings.get(ctx.instanceId);
-    const links = { statusPageUrl: pages.statusPageUrl || undefined, formPageUrl: pages.formPageUrl || undefined };
-    if (!memberId) return { items: [], signedIn: false, ...links };
+    if (!memberId) return { items: [], signedIn: false };
     const pageSize = 20;
     const res = await this.d.repo.find<TradeInDoc>(
       COLLECTIONS.tradeIns,
@@ -414,7 +409,7 @@ export class TradeInService {
       tradeInId: d._id, reference: d.reference, status: d.status, productTitle: d.productTitle,
       createdAt: toIso(d._createdDate), estimatedValueMinor: d.estimatedValueMinor, currency: d.currency, custom: !!d.customItem,
     }));
-    return { items, nextCursor: res.items.length > pageSize ? cursor + pageSize : undefined, signedIn: true, ...links };
+    return { items, nextCursor: res.items.length > pageSize ? cursor + pageSize : undefined, signedIn: true };
   }
 }
 

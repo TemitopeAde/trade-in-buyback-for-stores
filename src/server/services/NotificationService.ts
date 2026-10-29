@@ -6,7 +6,6 @@ import { sha256Hex } from '../crypto';
 import { sanitizeErrorForLog } from '../errors';
 import { DuplicateKeyError, type Doc, type Repo } from '../repo';
 import type { TradeInDoc } from '../types';
-import type { AccessTokenService } from './AuthorizationService';
 import { customerEmail, merchantEmail } from './email-templates';
 import { EmailSendError, type EmailRecipient, type TransmissionState, type WixEmailTransmissionsService } from './WixEmailTransmissionsService';
 
@@ -39,7 +38,6 @@ export class NotificationService {
   constructor(
     private readonly repo: Repo,
     private readonly email: Pick<WixEmailTransmissionsService, 'send' | 'get'>,
-    private readonly tokens: AccessTokenService,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
@@ -82,10 +80,7 @@ export class NotificationService {
     const storeName = settings.notifications.senderName || createTranslator(locale)('email.storeFallback');
     let content;
     if (target.kind === 'customer') {
-      const statusUrl = settings.pages.statusPageUrl
-        ? withToken(settings.pages.statusPageUrl, await this.tokens.mint(doc.instanceId, doc._id, `email:${target.event}`))
-        : undefined;
-      content = customerEmail(target.event, { doc, locale, storeName, statusUrl, actorType: p.actorType });
+      content = customerEmail(target.event, { doc, locale, storeName, actorType: p.actorType });
     } else {
       content = merchantEmail(target.event, { doc, locale, storeName, actorType: p.actorType });
     }
@@ -161,10 +156,4 @@ function statusFrom(state: TransmissionState): NotificationStatus {
     case 'IN_PROGRESS': return 'in_progress';
     default: return 'accepted';
   }
-}
-
-function withToken(pageUrl: string, token: string): string {
-  const url = new URL(pageUrl);
-  url.searchParams.set('ti', token);
-  return url.toString();
 }

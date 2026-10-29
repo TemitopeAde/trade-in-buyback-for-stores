@@ -5,7 +5,6 @@ const id = z.string().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/);
 const plainText = (max: number) =>
   z.string().trim().max(max).refine((s) => !/[<>]/.test(s), { message: 'html_not_allowed' });
 const minor = z.int().min(0).max(100_000_000_00);
-const httpsUrl = z.union([z.url({ protocol: /^https$/ }).max(500), z.literal('')]).default('');
 
 export const tradeInStatusSchema = z.enum(TRADE_IN_STATUSES);
 
@@ -144,13 +143,6 @@ export const settingsSchema = z.object({
     replyToEmail: z.union([z.email(), z.literal('')]).default(''),
   }),
   defaultLocale: z.string().max(16).default('en'),
-  // Published pages where the merchant placed the widgets; used for CTA navigation and email links.
-  pages: z
-    .object({
-      formPageUrl: httpsUrl,
-      statusPageUrl: httpsUrl,
-    })
-    .default({ formPageUrl: '', statusPageUrl: '' }),
 });
 export type Settings = z.infer<typeof settingsSchema>;
 

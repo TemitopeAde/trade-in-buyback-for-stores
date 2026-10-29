@@ -5,8 +5,7 @@ import type { CustomerNotificationEvent, MerchantNotificationEvent } from '../..
 import type { TradeInDoc } from '../types';
 
 // Builds email subject/HTML from catalog strings. Every interpolated value is HTML-escaped;
-// emails never include media URLs, gift card codes, tokens beyond the scoped status link, or
-// internal notes.
+// emails never include media URLs, gift card codes, access tokens or internal notes.
 
 export type EmailContent = { subject: string; html: string };
 
@@ -31,7 +30,7 @@ ${button}
 }
 
 /** actorType: who made the status change the email is about, when it matters for the wording. */
-type Ctx = { doc: TradeInDoc; locale: string; storeName: string; statusUrl?: string; actorType?: ActorType; extra?: Record<string, string> };
+type Ctx = { doc: TradeInDoc; locale: string; storeName: string; actorType?: ActorType; extra?: Record<string, string> };
 
 function formatDate(d: Date | string | undefined, locale: string): string {
   return d ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(d)) : '';
@@ -64,8 +63,8 @@ export function customerEmail(event: CustomerNotificationEvent, c: Ctx): EmailCo
     subject,
     html: layout({
       title: subject,
-      paragraphs: [t(body, v), t('email.reference', v)],
-      link: c.statusUrl ? { href: c.statusUrl, label: t('email.viewStatus') } : undefined,
+      // Trade-ins belong to site members, who see details and respond from their account.
+      paragraphs: [t(body, v), t('email.reference', v), t('email.viewInAccount', v)],
       footer: t('email.footer', v),
       dir,
     }),

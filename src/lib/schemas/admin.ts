@@ -151,8 +151,6 @@ export type SetupChecklist = {
   settingsSaved: boolean;
   /** The store has trade-in terms; customers can't submit until it does. */
   termsConfigured: boolean;
-  formPageConfigured: boolean;
-  statusPageConfigured: boolean;
   pluginPlaced?: boolean;
   giftCardsAvailable?: boolean;
   /** False when the most recent Wix gift card email failed; omitted until one was attempted. */

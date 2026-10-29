@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { getPlanEntitlements, type PlanTier } from '../../src/lib/plans';
 import { defaultSettings } from '../../src/lib/schemas/domain';
 import { COLLECTIONS } from '../../src/server/collections';
-import { AccessTokenService } from '../../src/server/services/AuthorizationService';
 import { CreditService } from '../../src/server/services/CreditService';
 import { IdempotencyService } from '../../src/server/services/IdempotencyService';
 import { NotificationService, type NotificationDoc } from '../../src/server/services/NotificationService';
@@ -70,7 +69,7 @@ function setup(planTier?: PlanTier) {
   const gift = new FakeGiftCards();
   const email = new FakeEmail();
   const credit = new CreditService(lifecycle, gift, settings, outbox);
-  const notifications = new NotificationService(repo, email, new AccessTokenService(repo));
+  const notifications = new NotificationService(repo, email);
   const processor = new OutboxProcessor({ lifecycle, settings, notifications, credit, media: new TradeInMediaService(repo, {} as WixMediaService), outbox });
   return { repo, outbox, lifecycle, settings, gift, email, credit, notifications, processor };
 }
@@ -129,7 +128,6 @@ describe('NotificationService', () => {
   const settings = () => {
     const st = defaultSettings();
     st.notifications.staffUserIds = ['owner-user'];
-    st.pages.statusPageUrl = 'https://shop.example.com/status';
     return st;
   };
   beforeEach(() => { s = setup(); });
@@ -142,7 +140,8 @@ describe('NotificationService', () => {
     expect(s.email.sent).toHaveLength(1);
     const html = s.email.sent[0].html;
     expect(html).toContain('Phone &lt;X&gt;'); // escaped
-    expect(html).toMatch(/https:\/\/shop\.example\.com\/status\?ti=[A-Za-z0-9_-]+/);
+    expect(html).toContain('Log in to your account');
+    expect(html).not.toContain('?ti=');
   });
 
   it('respects preferences and missing recipients', async () => {

@@ -45,7 +45,7 @@ export const tradeIns = new TradeInService({ repo, catalog, orders, rules, setti
 export const giftCards = new WixGiftCardsService();
 export const emails = new WixEmailTransmissionsService();
 export const credit = new CreditService(lifecycle, giftCards, settings, outbox);
-export const notifications = new NotificationService(repo, emails, tokens);
+export const notifications = new NotificationService(repo, emails);
 export const processor = new OutboxProcessor({ lifecycle, settings, notifications, credit, media, outbox });
 export const merchant = new MerchantService({
   repo,

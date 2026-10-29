@@ -288,8 +288,6 @@ export class MerchantService {
         hasRules: (await this.d.rules.listEnabled(instanceId)).length > 0,
         settingsSaved: await this.d.settings.exists(instanceId),
         termsConfigured: hasTerms(settings.termsHtml),
-        formPageConfigured: !!settings.pages.formPageUrl,
-        statusPageConfigured: !!settings.pages.statusPageUrl,
         pluginPlaced: this.d.pluginPlaced ? await this.d.pluginPlaced().catch(() => false) : undefined,
         giftCardsAvailable: this.d.giftCardsAvailable ? await this.d.giftCardsAvailable().catch(() => false) : undefined,
         giftCardEmailWorking: lastEmail ? lastEmail.giftCardEmailStatus === 'sent' : undefined,

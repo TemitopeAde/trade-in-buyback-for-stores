@@ -119,18 +119,6 @@ export function SettingsPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader><CardTitle>{t('dash.settings.pages')}</CardTitle></CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <Field label={t('dash.settings.formPage')} htmlFor="s-form" labelAfter={<InfoTip text={t('dash.settings.tip.formPage')} />} help={t('dash.settings.pagesHelp')} error={fieldErr('pages.formPageUrl')}>
-            <Input id="s-form" type="url" placeholder="https://" value={s.pages.formPageUrl} onChange={(e) => patch((d) => { d.pages.formPageUrl = e.target.value.trim(); return d; })} />
-          </Field>
-          <Field label={t('dash.settings.statusPage')} htmlFor="s-status" labelAfter={<InfoTip text={t('dash.settings.tip.statusPage')} />} error={fieldErr('pages.statusPageUrl')}>
-            <Input id="s-status" type="url" placeholder="https://" value={s.pages.statusPageUrl} onChange={(e) => patch((d) => { d.pages.statusPageUrl = e.target.value.trim(); return d; })} />
-          </Field>
-        </CardContent>
-      </Card>
-
       <Card id="terms">
         <CardHeader>
           <CardTitle>{t('dash.settings.terms')}</CardTitle>

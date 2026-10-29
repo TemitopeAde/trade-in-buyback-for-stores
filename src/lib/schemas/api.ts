@@ -92,13 +92,12 @@ export type FormConfig = {
   termsHtml: string;
   upToMinor?: number;
   currency?: string;
-  statusPageUrl?: string;
   /** Config for describing a custom item (no product, no questions; the offer is quoted later). */
   custom?: boolean;
 };
 
 /** `accepting: false` — the product qualifies but the store can't take new requests right now. */
-export type ProductCtaResponse = { eligible: boolean; accepting?: boolean; upToMinor?: number; currency?: string; formPageUrl?: string };
+export type ProductCtaResponse = { eligible: boolean; accepting?: boolean; upToMinor?: number; currency?: string };
 
 export type EstimateResponse =
   | { eligible: true; offerMinor: number; currency: string; complete: boolean }
@@ -137,6 +136,6 @@ export type CustomerTradeInView = {
 };
 
 export type MyTradeInRow = { tradeInId: string; reference: string; status: TradeInStatus; productTitle: string; createdAt: string; estimatedValueMinor: number; currency: string; custom: boolean };
-export type MyTradeInsResponse = { items: MyTradeInRow[]; nextCursor?: number; signedIn: boolean; statusPageUrl?: string; formPageUrl?: string };
+export type MyTradeInsResponse = { items: MyTradeInRow[]; nextCursor?: number; signedIn: boolean };
 
 export type ApiError = { error: { code: string; fields?: Record<string, string> } };

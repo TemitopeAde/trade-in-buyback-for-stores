@@ -130,7 +130,6 @@ export const en = {
   'form.submitting': 'Submitting…',
   'form.success.title': 'Trade-in submitted',
   'form.success.body': 'Your reference is {reference}. We’ve emailed you a link to track your trade-in.',
-  'form.success.viewStatus': 'Track this trade-in',
   'form.success.another': 'Start another trade-in',
   'form.errorSummary': 'Please fix the following before continuing:',
 
@@ -193,7 +192,6 @@ export const en = {
   'mine.empty': 'You haven’t submitted any trade-ins yet.',
   'mine.signIn': 'Sign in to see your trade-ins.',
   'mine.loadMore': 'Show more',
-  'mine.startNew': 'Start a trade-in',
 
   // ---- Product CTA ----
   'cta.label': 'Trade in',
@@ -212,8 +210,8 @@ export const en = {
 
   // ---- Emails (plain text with {variables}; rendered into a simple escaped HTML layout) ----
   'email.footer': 'You’re receiving this because of a trade-in request at {store}.',
-  'email.viewStatus': 'View your trade-in',
   'email.reference': 'Reference: {reference}',
+  'email.viewInAccount': 'Log in to your account on the {store} website to see the details and respond.',
   'email.customer.submitted.subject': 'We received your trade-in {reference}',
   'email.customer.submitted.body': 'Thanks, {name}. We received your trade-in for {item}. Your estimated credit is {amount}. We’ll review it and let you know the next steps.',
   'email.customer.submitted.custom': 'Thanks, {name}. We received your trade-in request for {item}. We’ll review your description and photos and email you an offer.',
@@ -327,8 +325,6 @@ export const en = {
   'dash.setup.rules': 'At least one trade-in rule is enabled',
   'dash.setup.settings': 'Hand-off and credit settings saved',
   'dash.setup.terms': 'Trade-in terms are added (required before customers can submit)',
-  'dash.setup.formPage': 'Trade-in form page is set',
-  'dash.setup.statusPage': 'Status page is set',
   'dash.setup.pluginPlaced': 'Product page trade-in button is placed',
   'dash.setup.giftCards': 'Wix Gift Cards is available',
   'dash.setup.giftCardEmail': 'Gift card emails are reaching customers (needs a premium site plan)',
@@ -579,10 +575,6 @@ export const en = {
   'dash.settings.termsEditorTab': 'Editor',
   'dash.settings.termsHtmlTab': 'HTML',
   'dash.settings.termsHtmlNote': 'Paste or edit HTML here. Scripts, styles and unsafe links are removed when you save. Switching back to the editor can simplify markup it doesn’t support, such as tables.',
-  'dash.settings.pages': 'Site pages',
-  'dash.settings.formPage': 'Trade-in form page URL',
-  'dash.settings.statusPage': 'Status page URL',
-  'dash.settings.pagesHelp': 'Published page addresses (https://…) where you placed the widgets. Used for links in emails and from product pages.',
   'dash.settings.customItems': 'Custom items',
   'dash.settings.customItemsHelp': 'Let customers trade in items that aren’t in your catalog. They describe the item and add photos; you review it and send an offer they can accept or decline.',
   'dash.settings.customItemsEnabled': 'Accept items that aren’t in the catalog',
@@ -603,8 +595,6 @@ export const en = {
   'dash.settings.tip.minimumCredit': 'Trade-ins with an offer below this amount aren’t accepted, and you can’t send an offer below it.',
   'dash.settings.tip.expiry': 'How long customers have to spend their store credit before the gift card expires.',
   'dash.settings.tip.sendGiftCardEmail': 'When credit is issued, Wix Gift Cards emails the gift card code to the customer. Turn it off if you’d rather give customers their code yourself.',
-  'dash.settings.tip.formPage': 'The page where you added the Trade-in form widget. Product page buttons and emails link here.',
-  'dash.settings.tip.statusPage': 'The page where you added the Trade-in status widget. Customers reach it from links in their emails to follow their trade-in.',
   'dash.settings.tip.customItemsPhotos': 'How many photos customers must add before they can submit a custom item. Set to 0 to make photos optional.',
   'dash.settings.tip.allowCancel': 'Customers can cancel their trade-in themselves until they drop off or ship the item.',
   'dash.settings.tip.revisedExpiry': 'When you change an offer after inspecting an item, the customer has this many days to accept or decline it.',

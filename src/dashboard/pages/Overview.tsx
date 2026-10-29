@@ -23,8 +23,6 @@ export function OverviewPage() {
         ['dash.setup.rules', data.setup.hasRules, '/rules'],
         ['dash.setup.settings', data.setup.settingsSaved, '/settings'],
         ['dash.setup.terms', data.setup.termsConfigured, '/settings'],
-        ['dash.setup.formPage', data.setup.formPageConfigured, '/settings'],
-        ['dash.setup.statusPage', data.setup.statusPageConfigured, '/settings'],
         ...(data.setup.pluginPlaced !== undefined ? [['dash.setup.pluginPlaced', data.setup.pluginPlaced, '/appearance'] as const] : []),
         ...(data.setup.giftCardsAvailable !== undefined ? [['dash.setup.giftCards', data.setup.giftCardsAvailable, '/diagnostics'] as const] : []),
         ...(data.setup.giftCardEmailWorking !== undefined ? [['dash.setup.giftCardEmail', data.setup.giftCardEmailWorking, '/settings'] as const] : []),
