@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { members } from '@wix/members';
+import { authentication } from '@wix/site-members';
 import { site } from '@wix/site-site';
 import { multilingual, window as wixWindow } from '@wix/site-window';
 import { resolveLocale } from '../../../lib/i18n';
@@ -39,6 +40,32 @@ export async function currentMemberEmail(): Promise<string | undefined> {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Whether a site member is signed in. A UI hint only: the server resolves membership from the
+ * verified session and refuses member-only calls from visitors.
+ */
+export function useMemberSession(): { status: 'loading' | 'member' | 'visitor'; login: () => Promise<void> } {
+  const [status, setStatus] = useState<'loading' | 'member' | 'visitor'>('loading');
+  const check = async () => {
+    const member = await members.getCurrentMember().then((r) => r.member, () => undefined);
+    setStatus(member ? 'member' : 'visitor');
+    return !!member;
+  };
+  useEffect(() => {
+    void check();
+  }, []);
+  const login = async () => {
+    try {
+      await authentication.promptLogin({ mode: 'login', modal: true });
+    } catch {
+      return; // the visitor closed the dialog
+    }
+    // Some hosts only apply the new session on reload.
+    if (!(await check())) globalThis.location?.reload();
+  };
+  return { status, login };
 }
 
 /** Reads a query parameter from the host page URL (live site only). */

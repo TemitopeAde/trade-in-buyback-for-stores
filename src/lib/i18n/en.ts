@@ -129,7 +129,10 @@ export const en = {
   'form.submit': 'Submit trade-in',
   'form.submitting': 'Submitting…',
   'form.success.title': 'Trade-in submitted',
-  'form.success.body': 'Your reference is {reference}. We’ve emailed you a link to track your trade-in.',
+  'form.success.body': 'Your reference is {reference}. You can follow your trade-in from your account, and we’ll email you at each step.',
+  'form.signIn': 'Log in or sign up to start a trade-in. Your trade-ins are saved to your account so you can follow them.',
+  'member.login': 'Log in / Sign up',
+  'error.signInRequired': 'Log in to your account to submit your trade-in.',
   'form.success.another': 'Start another trade-in',
   'form.errorSummary': 'Please fix the following before continuing:',
 
@@ -162,7 +165,8 @@ export const en = {
   // ---- Status widget ----
   'status.title': 'Your trade-in',
   'status.description': 'Track the progress of your trade-in.',
-  'status.lookupLabel': 'Open the tracking link from your email to see your trade-in.',
+  'status.lookupLabel': 'You haven’t submitted any trade-ins yet.',
+  'status.signIn': 'Log in to see the status of your trade-ins.',
   'status.latest': 'Latest update',
   'status.timeline': 'History',
   'status.estimated': 'Estimated credit',
