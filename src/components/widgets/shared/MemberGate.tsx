@@ -4,13 +4,16 @@ import { useMemberSession } from './env';
 import { Loading, TradeInEmptyState, WidgetButton } from './primitives';
 import { useWidget } from './WidgetThemeProvider';
 
-/** Shows its children to signed-in members; visitors get a prompt to log in or sign up. */
-export function MemberGate({ message, children }: { message: MessageKey; children: ReactNode }) {
+/**
+ * Shows its children to signed-in members; visitors get a prompt to log in or sign up.
+ * `header` is shown above the prompt, since the children (which usually render it) are not.
+ */
+export function MemberGate({ message, header, children }: { message: MessageKey; header?: ReactNode; children: ReactNode }) {
   const { t } = useWidget();
   const { status, login } = useMemberSession();
   const [busy, setBusy] = useState(false);
-  if (status === 'loading') return <Loading />;
   if (status === 'member') return <>{children}</>;
+  if (status === 'loading') return <div className="ti-stack">{header}<Loading /></div>;
   const onLogin = async () => {
     setBusy(true);
     try {
@@ -19,5 +22,10 @@ export function MemberGate({ message, children }: { message: MessageKey; childre
       setBusy(false);
     }
   };
-  return <TradeInEmptyState body={t(message)} action={<WidgetButton busy={busy} onClick={onLogin}>{t('member.login')}</WidgetButton>} />;
+  return (
+    <div className="ti-stack">
+      {header}
+      <TradeInEmptyState body={t(message)} action={<WidgetButton busy={busy} onClick={onLogin}>{t('member.login')}</WidgetButton>} />
+    </div>
+  );
 }

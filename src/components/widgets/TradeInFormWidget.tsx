@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import React, { useEffect, useReducer, useRef, useState } from 'react';
 import type { MessageKey } from '../../lib/i18n';
 import { toPublicMediaUrl } from '../../lib/media';
 import { formatMoney, toMinor } from '../../lib/money';
@@ -8,6 +8,7 @@ import { ApiClientError, errorMessageKey, widgetApi } from './shared/api';
 import { ConditionQuestionGroup } from './shared/ConditionQuestionGroup';
 import { currentMemberEmail, newIdempotencyKey, readQueryParam, useSiteEnv } from './shared/env';
 import { PhotoUploader, UploadChecklist, UploadRejections, VideoUploader } from './shared/Evidence';
+import { MemberGate } from './shared/MemberGate';
 import { HandoffMethodSelector, OfferSummary } from './shared/Offer';
 import { Alert, Loading, TradeInErrorState, WidgetButton, WidgetCard, WidgetField, WidgetHeader } from './shared/primitives';
 import { ProductPicker } from './shared/ProductPicker';
@@ -118,15 +119,23 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // ---- Flow --------------------------------------------------------------------------
 
-export function FormFlow({
+type FormFlowProps = { initialProductId?: string; onClose?: () => void; catalogLayout?: 'grid' | 'table' };
+
+/** Trade-ins belong to site members, so visitors are asked to log in before they start. */
+export function FormFlow(props: FormFlowProps = {}) {
+  const { t } = useWidget();
+  return (
+    <MemberGate message="form.signIn" header={<WidgetHeader id="ti-form-title" defaultTitle={t('form.title')} defaultDescription={t('form.description')} />}>
+      <FormSteps {...props} />
+    </MemberGate>
+  );
+}
+
+function FormSteps({
   initialProductId,
   onClose,
   catalogLayout,
-}: {
-  initialProductId?: string;
-  onClose?: () => void;
-  catalogLayout?: 'grid' | 'table';
-} = {}) {
+}: FormFlowProps) {
   const { t, style, locale } = useWidget();
   const [state, dispatch] = useReducer(reducer, initial);
   const [issues, setIssues] = useState<Issue[]>([]);
@@ -314,7 +323,7 @@ export function FormFlow({
     return issue ? t(issue.key, issue.vars) : undefined;
   };
 
-  if (result) return <SubmissionSuccess result={result} statusPageUrl={config?.statusPageUrl} onAnother={() => { setResult(undefined); submissionKey.current = newIdempotencyKey(); dispatch({ type: 'reset' }); }} />;
+  if (result) return <SubmissionSuccess result={result} onAnother={() => { setResult(undefined); submissionKey.current = newIdempotencyKey(); dispatch({ type: 'reset' }); }} />;
 
   return (
     <div className="ti-stack">
@@ -459,6 +468,7 @@ export function FormFlow({
 }
 
 function submitErrorKey(err: unknown): MessageKey {
+  if (err instanceof ApiClientError && err.fields?.form === 'sign_in_required') return 'error.signInRequired';
   if (err instanceof ApiClientError && err.status === 400) {
     const f = err.fields ?? {};
     if (f.media === 'photos_min') return 'validation.photosMin';
@@ -555,34 +565,15 @@ function TermsField({ html, checked, error, onChange }: { html: string; checked:
   );
 }
 
-function SubmissionSuccess({ result, statusPageUrl, onAnother }: { result: SubmitResponse; statusPageUrl?: string; onAnother: () => void }) {
+function SubmissionSuccess({ result, onAnother }: { result: SubmitResponse; onAnother: () => void }) {
   const { t } = useWidget();
-  const statusHref = useMemo(() => {
-    if (!statusPageUrl) return undefined;
-    try {
-      const url = new URL(statusPageUrl);
-      url.searchParams.set('ti', result.accessToken);
-      return url.toString();
-    } catch {
-      return undefined;
-    }
-  }, [statusPageUrl, result.accessToken]);
   return (
     <div className="ti-stack">
       <Alert tone="success" title={t('form.success.title')} live>
         <p style={{ margin: '6px 0 0' }}>{t('form.success.body', { reference: result.reference })}</p>
       </Alert>
-      {statusHref ? (
-        <div className="ti-row">
-          <a className="ti-button ti-button--primary" href={statusHref}>{t('form.success.viewStatus')}</a>
-          <WidgetButton variant="secondary" onClick={onAnother}>{t('form.success.another')}</WidgetButton>
-        </div>
-      ) : (
-        <>
-          <TradeInStatusView accessToken={result.accessToken} />
-          <WidgetButton variant="secondary" onClick={onAnother}>{t('form.success.another')}</WidgetButton>
-        </>
-      )}
+      <TradeInStatusView tradeInId={result.tradeInId} />
+      <WidgetButton variant="secondary" onClick={onAnother}>{t('form.success.another')}</WidgetButton>
     </div>
   );
 }
