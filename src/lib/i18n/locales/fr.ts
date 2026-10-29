@@ -394,7 +394,6 @@ export const fr: Catalog = {
   'status.in_transit': 'En transit',
   'status.inspection': 'En cours d’inspection',
   'status.latest': 'Dernière mise à jour',
-  'status.lookupLabel': 'Ouvrez le lien de suivi dans votre e-mail pour voir votre reprise.',
   'status.received': 'Reçu',
   'status.rejected': 'Non accepté',
   'status.rejectionReason': 'Motif : {reason}',

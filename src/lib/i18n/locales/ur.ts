@@ -395,7 +395,6 @@ export const ur: Catalog = {
   'status.in_transit': 'راستے میں',
   'status.inspection': 'معائنہ جاری ہے',
   'status.latest': 'تازہ ترین اپ ڈیٹ',
-  'status.lookupLabel': 'اپنا ٹریڈ ان دیکھنے کے لیے اپنے ای میل کا ٹریکنگ لنک کھولیں۔',
   'status.received': 'موصول ہو گیا',
   'status.rejected': 'مسترد',
   'status.rejectionReason': 'وجہ: {reason}',

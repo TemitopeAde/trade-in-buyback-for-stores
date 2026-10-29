@@ -394,7 +394,6 @@ export const es: Catalog = {
   'status.in_transit': 'En tránsito',
   'status.inspection': 'En inspección',
   'status.latest': 'Última actualización',
-  'status.lookupLabel': 'Abre el enlace de seguimiento de tu correo para ver tu canje.',
   'status.received': 'Recibido',
   'status.rejected': 'No aceptado',
   'status.rejectionReason': 'Motivo: {reason}',

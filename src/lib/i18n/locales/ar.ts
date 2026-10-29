@@ -395,7 +395,6 @@ export const ar: Catalog = {
   'status.in_transit': 'في الطريق',
   'status.inspection': 'قيد الفحص',
   'status.latest': 'آخر تحديث',
-  'status.lookupLabel': 'افتح رابط التتبع المرسل إلى بريدك الإلكتروني لعرض طلبك.',
   'status.received': 'تم الاستلام',
   'status.rejected': 'غير مقبول',
   'status.rejectionReason': 'السبب: {reason}',

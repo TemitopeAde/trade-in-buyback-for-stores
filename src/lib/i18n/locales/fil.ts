@@ -395,7 +395,6 @@ export const fil: Catalog = {
   'status.in_transit': 'Papunta na',
   'status.inspection': 'Kasalukuyang sinusuri',
   'status.latest': 'Pinakabagong update',
-  'status.lookupLabel': 'Buksan ang tracking link mula sa iyong email para makita ang trade-in.',
   'status.received': 'Natanggap na',
   'status.rejected': 'Tinanggihan',
   'status.rejectionReason': 'Dahilan: {reason}',

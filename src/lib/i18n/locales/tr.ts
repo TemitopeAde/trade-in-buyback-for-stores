@@ -395,7 +395,6 @@ export const tr: Catalog = {
   'status.in_transit': 'Yolda',
   'status.inspection': 'İnceleniyor',
   'status.latest': 'Son güncelleme',
-  'status.lookupLabel': 'Takasınızı görmek için e-postanızdaki takip bağlantısını açın.',
   'status.received': 'Teslim alındı',
   'status.rejected': 'Kabul edilmedi',
   'status.rejectionReason': 'Sebep: {reason}',

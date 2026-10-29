@@ -395,7 +395,6 @@ export const ja: Catalog = {
   'status.in_transit': '配送中',
   'status.inspection': '査定中',
   'status.latest': '最新の更新',
-  'status.lookupLabel': 'メール内の確認リンクから下取り状況をご覧いただけます。',
   'status.received': '受領済み',
   'status.rejected': '受付不可',
   'status.rejectionReason': '理由: {reason}',

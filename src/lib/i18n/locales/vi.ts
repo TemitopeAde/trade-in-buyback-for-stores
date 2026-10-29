@@ -395,7 +395,6 @@ export const vi: Catalog = {
   'status.in_transit': 'Đang vận chuyển',
   'status.inspection': 'Đang kiểm định',
   'status.latest': 'Cập nhật mới nhất',
-  'status.lookupLabel': 'Mở liên kết theo dõi từ email của bạn để xem đơn thu cũ đổi mới.',
   'status.received': 'Đã nhận',
   'status.rejected': 'Bị từ chối',
   'status.rejectionReason': 'Lý do: {reason}',

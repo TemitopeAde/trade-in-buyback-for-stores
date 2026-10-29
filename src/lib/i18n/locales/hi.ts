@@ -395,7 +395,6 @@ export const hi: Catalog = {
   'status.in_transit': 'मार्ग में',
   'status.inspection': 'जांच जारी है',
   'status.latest': 'नवीनतम अपडेट',
-  'status.lookupLabel': 'अपना ट्रेड-इन देखने के लिए अपने ईमेल में दिए गए ट्रैकिंग लिंक को खोलें।',
   'status.received': 'प्राप्त हुआ',
   'status.rejected': 'अस्वीकृत',
   'status.rejectionReason': 'कारण: {reason}',

@@ -867,6 +867,7 @@
 /* Table-like list (My trade-ins) */
 .ti-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .ti-list__item { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; padding-block: 12px; border-block-end: var(--ti-divider); }
+.ti-list__details { grid-column: 1 / -1; padding-block-start: 8px; }
 .ti-list__meta {
   color: var(--ti-muted);
   font-family: var(--ti-helper-family, inherit);

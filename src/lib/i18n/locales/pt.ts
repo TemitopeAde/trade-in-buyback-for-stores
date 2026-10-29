@@ -395,7 +395,6 @@ export const pt: Catalog = {
   'status.in_transit': 'Em trânsito',
   'status.inspection': 'Em inspeção',
   'status.latest': 'Última atualização',
-  'status.lookupLabel': 'Abra o link de rastreamento do seu e-mail para ver sua troca.',
   'status.received': 'Recebido',
   'status.rejected': 'Não aceito',
   'status.rejectionReason': 'Motivo: {reason}',

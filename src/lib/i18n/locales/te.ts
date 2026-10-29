@@ -395,7 +395,6 @@ export const te: Catalog = {
   'status.in_transit': 'రవాణాలో ఉంది',
   'status.inspection': 'తనిఖీ జరుగుతోంది',
   'status.latest': 'తాజా అప్‌డేట్',
-  'status.lookupLabel': 'మీ ట్రేడ్-ఇన్ చూడటానికి మీ ఇమెయిల్‌లోని ట్రాకింగ్ లింక్‌ను తెరవండి.',
   'status.received': 'స్వీకరించబడింది',
   'status.rejected': 'తిరస్కరించబడింది',
   'status.rejectionReason': 'కారణం: {reason}',

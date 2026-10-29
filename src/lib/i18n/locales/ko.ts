@@ -395,7 +395,6 @@ export const ko: Catalog = {
   'status.in_transit': '배송 중',
   'status.inspection': '검수 중',
   'status.latest': '최근 업데이트',
-  'status.lookupLabel': '이메일의 링크를 열어 보상판매 내역을 확인하세요.',
   'status.received': '수령됨',
   'status.rejected': '접수 불가',
   'status.rejectionReason': '사유: {reason}',

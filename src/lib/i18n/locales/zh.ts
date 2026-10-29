@@ -394,7 +394,6 @@ export const zh: Catalog = {
   'status.in_transit': '运输中',
   'status.inspection': '质检中',
   'status.latest': '最新更新',
-  'status.lookupLabel': '通过邮件中的查询链接查看您的以旧换新单。',
   'status.received': '已收到',
   'status.rejected': '未接受',
   'status.rejectionReason': '原因：{reason}',

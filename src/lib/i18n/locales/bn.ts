@@ -395,7 +395,6 @@ export const bn: Catalog = {
   'status.in_transit': 'পথিমধ্যে',
   'status.inspection': 'পরীক্ষা চলছে',
   'status.latest': 'সর্বশেষ আপডেট',
-  'status.lookupLabel': 'আপনার ট্রেড-ইন দেখতে ইমেলের ট্র্যাকিং লিঙ্কে ক্লিক করুন।',
   'status.received': 'গৃহীত',
   'status.rejected': 'প্রত্যাখ্যাত',
   'status.rejectionReason': 'কারণ: {reason}',

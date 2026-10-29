@@ -395,7 +395,6 @@ export const ta: Catalog = {
   'status.in_transit': 'வழியில் உள்ளது',
   'status.inspection': 'ஆய்வு நடக்கிறது',
   'status.latest': 'சமீபத்திய புதுப்பிப்பு',
-  'status.lookupLabel': 'உங்கள் பரிமாற்றத்தைக் காண உங்கள் மின்னஞ்சலில் உள்ள இணைப்பைத் திறக்கவும்.',
   'status.received': 'பெறப்பட்டது',
   'status.rejected': 'நிராகரிக்கப்பட்டது',
   'status.rejectionReason': 'காரணம்: {reason}',

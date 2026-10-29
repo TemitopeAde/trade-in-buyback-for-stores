@@ -395,7 +395,6 @@ export const it: Catalog = {
   'status.in_transit': 'In transito',
   'status.inspection': 'In ispezione',
   'status.latest': 'Ultimo aggiornamento',
-  'status.lookupLabel': 'Apri il link di tracciamento dalla tua email per vedere la permuta.',
   'status.received': 'Ricevuto',
   'status.rejected': 'Non accettata',
   'status.rejectionReason': 'Motivo: {reason}',

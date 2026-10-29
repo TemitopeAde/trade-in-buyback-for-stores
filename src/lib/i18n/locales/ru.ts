@@ -395,7 +395,6 @@ export const ru: Catalog = {
   'status.in_transit': 'В пути',
   'status.inspection': 'На проверке',
   'status.latest': 'Последнее обновление',
-  'status.lookupLabel': 'Перейдите по ссылке для отслеживания из письма.',
   'status.received': 'Получено',
   'status.rejected': 'Не принято',
   'status.rejectionReason': 'Причина: {reason}',

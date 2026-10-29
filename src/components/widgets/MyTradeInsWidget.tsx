@@ -4,8 +4,10 @@ import { formatMoney } from '../../lib/money';
 import type { MyTradeInRow } from '../../lib/schemas/api';
 import { errorMessageKey, widgetApi } from './shared/api';
 import { useSiteEnv } from './shared/env';
+import { MemberGate } from './shared/MemberGate';
 import { Alert, Loading, TradeInEmptyState, TradeInErrorState, WidgetButton, WidgetHeader } from './shared/primitives';
 import { useWidget, WidgetThemeProvider } from './shared/WidgetThemeProvider';
+import { TradeInStatusView } from './TradeInStatusWidget';
 
 export type MyTradeInsWidgetProps = { styleConfig?: string | null; embedded?: boolean; designMode?: boolean };
 
@@ -29,21 +31,11 @@ export function MyTradeInsWidget({ styleConfig, embedded, designMode }: MyTradeI
       {!env.ready && !designMode ? null : (
         <div className="ti-stack">
           <MineHeader />
-          {isEditor ? <MinePreview /> : <MineList />}
+          {isEditor ? <MinePreview /> : <MemberGate message="mine.signIn"><MineList /></MemberGate>}
         </div>
       )}
     </WidgetThemeProvider>
   );
-}
-
-function safeUrl(value?: string | null): string | undefined {
-  if (!value) return undefined;
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' ? url.toString() : undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 function MineHeader() {
@@ -52,8 +44,8 @@ function MineHeader() {
 }
 
 function MineList() {
-  const { t, locale, style } = useWidget();
-  const [links, setLinks] = useState<{ statusPageUrl?: string; formPageUrl?: string }>({});
+  const { t, locale } = useWidget();
+  const [open, setOpen] = useState<string>();
   const [rows, setRows] = useState<MyTradeInRow[]>([]);
   const [next, setNext] = useState<number | undefined>(0);
   const [signedIn, setSignedIn] = useState(true);
@@ -66,7 +58,6 @@ function MineList() {
     widgetApi.mine(cursor).then(
       (res) => {
         setSignedIn(res.signedIn);
-        setLinks({ statusPageUrl: safeUrl(res.statusPageUrl), formPageUrl: safeUrl(res.formPageUrl) });
         setRows((prev) => (cursor === 0 ? res.items : [...prev, ...res.items]));
         setNext(res.nextCursor);
       },
@@ -75,26 +66,18 @@ function MineList() {
   }, [t]);
   useEffect(() => load(0), [load]);
 
-  const { statusPageUrl, formPageUrl } = links;
-  const startAction = formPageUrl ? <a className="ti-button ti-button--primary" href={formPageUrl}>{style.content.primaryLabel || t('mine.startNew')}</a> : undefined;
-
   if (error) return <TradeInErrorState message={error} onRetry={() => load(0)} />;
+  // The session can lapse after the gate passed.
   if (!signedIn) return <Alert tone="info">{t('mine.signIn')}</Alert>;
   if (!rows.length && loading) return <Loading />;
-  if (!rows.length) return <TradeInEmptyState body={t('mine.empty')} action={startAction} />;
-
-  const detailHref = (id: string) => {
-    if (!statusPageUrl) return undefined;
-    const url = new URL(statusPageUrl);
-    url.searchParams.set('id', id);
-    return url.toString();
-  };
+  if (!rows.length) return <TradeInEmptyState body={t('mine.empty')} />;
 
   return (
     <div className="ti-stack">
       <ul className="ti-list">
         {rows.map((r) => {
-          const href = detailHref(r.tradeInId);
+          const expanded = open === r.tradeInId;
+          const detailsId = `ti-mine-${r.tradeInId}`;
           return (
             <li key={r.tradeInId} className="ti-list__item">
               <span><strong>{r.productTitle}</strong></span>
@@ -102,14 +85,23 @@ function MineList() {
               <span className="ti-list__meta">
                 {t('common.reference')}: {r.reference} · {formatDate(r.createdAt, locale)} · {r.custom && !r.estimatedValueMinor ? t('status.awaitingOffer') : formatMoney(r.estimatedValueMinor, r.currency, locale)}
               </span>
-              {href && <a className="ti-button ti-button--link" href={href} aria-label={`${t('common.viewDetails')}: ${r.reference}`}>{t('common.viewDetails')}</a>}
+              <button
+                type="button"
+                className="ti-button ti-button--link"
+                aria-expanded={expanded}
+                aria-controls={detailsId}
+                aria-label={`${t(expanded ? 'mine.hideDetails' : 'common.viewDetails')}: ${r.reference}`}
+                onClick={() => setOpen(expanded ? undefined : r.tradeInId)}
+              >
+                {t(expanded ? 'mine.hideDetails' : 'common.viewDetails')}
+              </button>
+              {expanded && <div id={detailsId} className="ti-list__details"><TradeInStatusView tradeInId={r.tradeInId} /></div>}
             </li>
           );
         })}
       </ul>
       <div className="ti-row ti-row--between">
-        {next !== undefined ? <WidgetButton variant="secondary" busy={loading} onClick={() => load(next)}>{t('mine.loadMore')}</WidgetButton> : <span />}
-        {startAction}
+        {next !== undefined && <WidgetButton variant="secondary" busy={loading} onClick={() => load(next)}>{t('mine.loadMore')}</WidgetButton>}
       </div>
     </div>
   );

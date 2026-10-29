@@ -196,6 +196,7 @@ export const en = {
   'mine.empty': 'You haven’t submitted any trade-ins yet.',
   'mine.signIn': 'Sign in to see your trade-ins.',
   'mine.loadMore': 'Show more',
+  'mine.hideDetails': 'Hide details',
 
   // ---- Product CTA ----
   'cta.label': 'Trade in',
@@ -540,7 +541,7 @@ export const en = {
   'dash.rule.deleted': 'Rule deleted',
 
   'dash.settings.title': 'Settings',
-  'dash.settings.subtitle': 'Hand-off, credit, terms, pages and data retention.',
+  'dash.settings.subtitle': 'Hand-off, store credit, terms, custom items and data retention.',
   'dash.settings.handoff': 'Hand-off methods',
   'dash.settings.dropOff': 'Drop-off in store',
   'dash.settings.shipIn': 'Ship-in',
@@ -604,6 +605,14 @@ export const en = {
   'dash.settings.tip.revisedExpiry': 'When you change an offer after inspecting an item, the customer has this many days to accept or decline it.',
   'dash.settings.tip.retention': 'Keeps your Media Manager tidy and limits how long you store customer photos and videos.',
   'dash.settings.tip.locale': 'Used for emails to you, for customers whose language isn’t known, and for listings created from traded-in items.',
+  'dash.settings.handoffDesc': 'How customers get their items to you. Turn on at least one method.',
+  'dash.settings.handoffDetails': '{method}: address and instructions',
+  'dash.settings.creditDesc': 'Accepted trade-ins are paid as a Wix gift card that customers spend in your store.',
+  'dash.settings.workflowDesc': 'What customers can do after they submit, and how long offers stay open.',
+  'dash.settings.data': 'Data & language',
+  'dash.settings.dataDesc': 'How long you keep customer photos and videos, and the language used when a customer’s isn’t known.',
+  'dash.settings.unsaved': 'You have unsaved changes',
+  'dash.settings.discard': 'Discard',
 
   'dash.appearance.title': 'Widgets & appearance',
   'dash.appearance.subtitle': 'Add the trade-in widgets to your site and design them in the Editor.',

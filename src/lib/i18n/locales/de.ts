@@ -395,7 +395,6 @@ export const de: Catalog = {
   'status.in_transit': 'Unterwegs',
   'status.inspection': 'In Prüfung',
   'status.latest': 'Letzte Aktualisierung',
-  'status.lookupLabel': 'Öffnen Sie den Tracking-Link aus Ihrer E-Mail, um Ihre Anfrage zu sehen.',
   'status.received': 'Empfangen',
   'status.rejected': 'Nicht akzeptiert',
   'status.rejectionReason': 'Grund: {reason}',

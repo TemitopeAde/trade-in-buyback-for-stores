@@ -395,7 +395,6 @@ export const id: Catalog = {
   'status.in_transit': 'Dalam Pengiriman',
   'status.inspection': 'Sedang Diperiksa',
   'status.latest': 'Pembaruan terkini',
-  'status.lookupLabel': 'Buka tautan pelacakan dari email Anda untuk melihat pengajuan tukar tambah.',
   'status.received': 'Diterima',
   'status.rejected': 'Tidak Diterima',
   'status.rejectionReason': 'Alasan: {reason}',
