@@ -21,23 +21,6 @@ export function TradeInProductButtonWidget({ styleConfig, productId }: TradeInPr
   );
 }
 
-function buildCtaHref(formPageUrl: string | undefined, productId: string | undefined): string | undefined {
-  if (!productId) return undefined;
-  const base = formPageUrl?.trim() || '/trade-in';
-  try {
-    const origin = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : 'https://localhost';
-    const url = new URL(base, origin);
-    url.searchParams.set('product', productId);
-    if (formPageUrl && /^https?:\/\//i.test(formPageUrl)) {
-      return url.toString();
-    }
-    return `${url.pathname}${url.search}${url.hash}`;
-  } catch {
-    const sep = base.includes('?') ? '&' : '?';
-    return `${base}${sep}product=${encodeURIComponent(productId)}`;
-  }
-}
-
 function Cta({
   productId,
   styleConfig,
@@ -100,7 +83,6 @@ function Cta({
   }
   const paused = !preview && data?.accepting === false;
 
-  const href = preview ? undefined : buildCtaHref(data?.formPageUrl, productId);
   const upTo = preview
     ? currency && formatMoney(12000, currency, locale)
     : data?.upToMinor !== undefined && data.currency
@@ -114,15 +96,13 @@ function Cta({
   return (
     <>
       <div className="ti-cta" style={{ ['--ti-cta-align' as string]: align }}>
-        {/* Always a <button> — never an <a> — so the Wix custom-element
-            context cannot follow the href before React handles the click. */}
+        {/* Opens the trade-in form in a drawer on the product page. */}
         <button
           type="button"
           className="ti-button ti-button--primary"
           onClick={paused ? undefined : handleClick}
           disabled={paused}
           aria-describedby={paused ? pausedId : undefined}
-          {...(href && !paused ? { 'data-href': href } : {})}
         >
           {style.content.primaryLabel || t('cta.label')}
         </button>

@@ -6,6 +6,7 @@ import type { CustomerTradeInView, MyTradeInRow } from '../../lib/schemas/api';
 import { errorMessageKey, widgetApi } from './shared/api';
 import { newIdempotencyKey, readQueryParam, scrubQueryParam, useSiteEnv } from './shared/env';
 import { Alert, Loading, TradeInEmptyState, TradeInErrorState, WidgetButton, WidgetCard, WidgetField, WidgetHeader } from './shared/primitives';
+import { MemberGate } from './shared/MemberGate';
 import { QuoteCard, RevisedOfferCard, TradeInStatusTimeline } from './shared/Status';
 import { useWidget, WidgetThemeProvider } from './shared/WidgetThemeProvider';
 
@@ -13,10 +14,10 @@ export type TradeInStatusWidgetProps = { styleConfig?: string | null; embedded?:
 
 // `embedded`: rendered inside an Editor React component, which owns the title, description and
 // region landmark. `designMode`: the host knows it is in Editor design mode, so show the preview.
-// Access is by a scoped access token (?ti= from the email/success link) or, for members, by
-// ?id= of a trade-in they own. The token is removed from the address bar after it's read.
-// Opened without a link, a signed-in member sees their own trade-ins (resolved on the server
-// from the verified session); visitors see the lookup hint.
+// A signed-in member sees their own trade-ins (resolved on the server from the verified
+// session), or the one in ?id= when they own it; visitors are asked to log in. Links with a
+// scoped access token (?ti=) from emails sent before trade-ins required an account still work;
+// the token is removed from the address bar after it's read.
 export function TradeInStatusWidget({ styleConfig, embedded, designMode }: TradeInStatusWidgetProps) {
   const env = useSiteEnv();
   const isEditor = !!designMode || env.isEditor;
@@ -42,7 +43,11 @@ export function TradeInStatusWidget({ styleConfig, embedded, designMode }: Trade
       {!env.ready && !designMode ? null : isEditor ? <StatusEditorPreview /> : ref && (
         <div className="ti-stack">
           <StatusHeader />
-          {ref.token || ref.tradeInId ? <TradeInStatusView accessToken={ref.token} tradeInId={ref.tradeInId} /> : <MemberStatus />}
+          {ref.token ? <TradeInStatusView accessToken={ref.token} /> : (
+            <MemberGate message="status.signIn">
+              {ref.tradeInId ? <TradeInStatusView tradeInId={ref.tradeInId} /> : <MemberStatus />}
+            </MemberGate>
+          )}
         </div>
       )}
     </WidgetThemeProvider>
