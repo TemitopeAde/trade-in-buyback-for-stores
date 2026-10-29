@@ -160,7 +160,7 @@ export const TEXT_LIMITS = { title: 80, description: 300, primaryLabel: 40, seco
 export const CONTENT_KEYS_BY_WIDGET: Record<WidgetKind, readonly (keyof TradeInWidgetStyle['content'])[]> = {
   form: ['showTitle', 'title', 'showDescription', 'description', 'primaryLabel', 'secondaryLabel', 'showOfferEstimate', 'showStepLabels', 'showHelperText', 'showOptionalFields'],
   status: ['showTitle', 'title', 'showDescription', 'description', 'primaryLabel', 'secondaryLabel', 'showHelperText', 'showTimelineDetails'],
-  'my-trade-ins': ['showTitle', 'title', 'showDescription', 'description', 'primaryLabel', 'showHelperText'],
+  'my-trade-ins': ['showTitle', 'title', 'showDescription', 'description', 'showHelperText'],
   'product-cta': ['primaryLabel', 'showProductEstimate', 'showHelperText'],
 };
 
